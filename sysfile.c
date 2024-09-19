@@ -91,6 +91,18 @@ sys_write(void)
 }
 
 int
+sys_lseek(void)
+{
+  struct file *f;
+  int off;
+  int whence;
+
+  if(argfd(0, 0, &f) < 0 || argint(1, &off) < 0 || argint(2, &whence) < 0)
+    return -1;
+  return fileseek(f, off, whence);
+}
+
+int
 sys_close(void)
 {
   int fd;

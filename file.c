@@ -155,3 +155,23 @@ filewrite(struct file *f, char *addr, int n)
   panic("filewrite");
 }
 
+// Change offset of file f.
+int
+fileseek(struct file *f, int off, int whence)
+{
+  if(off < 0)
+    return -1;
+  if(f->type == FD_PIPE)
+    return -1;
+  if(f->type == FD_INODE){
+    if(whence == SEEK_SET)
+      return f->off = off;
+    else if(whence == SEEK_CUR)
+      return f->off += off;
+    else if(whence == SEEK_END)
+      return f->off = f->ip->size + off;
+    else
+      return -1;
+  }
+  panic("fileseek");
+}
