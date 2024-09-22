@@ -183,9 +183,10 @@ UPROGS=\
 	_wc\
 	_zombie\
 	_helloxv6\
+	_lseektest\
 
 fs.img: mkfs README $(UPROGS)
-	./mkfs fs.img README $(UPROGS)
+	./mkfs fs.img README hello.txt $(UPROGS)
 
 -include *.d
 
@@ -256,6 +257,7 @@ EXTRA=\
 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
 	.gdbinit.tmpl gdbutil\
 	helloxv6.c\
+	lseektest.c\
 
 dist:
 	rm -rf dist
