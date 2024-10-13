@@ -118,6 +118,18 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
 
+  // TODO: wait or pinit or allocproc(here), which place is better to perform this?
+  p->end_time = -1;
+
+  // Due of the requirement of assignment, init and sh process must always be at
+  // the lowest priority. Instead of using process name to implement this,
+  // I used pid. Because proc.name is for debugging purpose.
+  if(p->pid < 3){
+    proc_queue_push(&ptable.queue_head[3], p);
+  }else{
+    proc_queue_push(&ptable.queue_head[0], p);
+  }
+
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -292,6 +304,7 @@ exit(void)
 
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
+  proc_queue_pop(curproc);
   sched();
   panic("zombie exit");
 }
@@ -323,6 +336,15 @@ wait(void)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
+
+        p->qlevel = 0;
+        p->cpu_burst = 0;
+        p->cpu_wait = 0;
+        p->io_wait_time = 0;
+        p->end_time = 0;
+        p->qprev = 0;
+        p->qnext = 0;
+
         p->state = UNUSED;
         release(&ptable.lock);
         return pid;
