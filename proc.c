@@ -10,6 +10,7 @@
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
+  struct proc queue_head[4];
 } ptable;
 
 static struct proc *initproc;
@@ -20,9 +21,37 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+// The ptable lock must be held.
+// Pops the given p, not the first entry.
+inline void
+proc_queue_pop(struct proc *p)
+{
+  p->qprev->qnext = p->qnext;
+  p->qnext->qprev = p->qprev;
+}
+
+// The ptable lock must be held.
+// Pushs to previous of base (base become qnext of p)
+inline void
+proc_queue_push(struct proc *base, struct proc *p)
+{
+  base->qprev->qnext = p;
+  p->qprev = base->qprev;
+  p->qnext = base;
+  base->qprev = p;
+}
+
 void
 pinit(void)
 {
+  int i;
+  for(i = 0; i < 4; i++){
+    ptable.queue_head[i].qprev = &ptable.queue_head[i];
+    ptable.queue_head[i].qnext = &ptable.queue_head[i];
+
+    // Set time slice to 10, 20, 40, 80
+    ptable.queue_head[i].cpu_burst = 10 * (1 << i);
+  }
   initlock(&ptable.lock, "ptable");
 }
 
