@@ -51,13 +51,14 @@ struct proc {
   char name[16];               // Process name (debugging)
 
   // schedule related values
-  uint qlevel;                // Level of queue that process belongs to
+  uint q_level;                 // Level of queue that process belongs to
   uint cpu_burst;              // Ticks that process used cpu in this queue
   // Ticks that process waits to use cpu after becoming runnable in this queue
   uint cpu_wait;
   // Ticks that process waits for io job or some event in this queue
   uint io_wait_time;
-  uint end_time;               // Total ticks allocated to process
+  int end_time;                // Total ticks allocated to process
+  uint total_time;             // Total ticks process used
   struct proc *qprev;          // Previous entry in queue;
   struct proc *qnext;          // Next entry in queue;
 };

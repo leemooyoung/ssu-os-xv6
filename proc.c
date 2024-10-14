@@ -10,7 +10,7 @@
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
-  struct proc queue_head[4];
+  struct proc queue_head[NPROCQUEUE];
 } ptable;
 
 static struct proc *initproc;
@@ -45,11 +45,11 @@ void
 pinit(void)
 {
   int i;
-  for(i = 0; i < 4; i++){
+  for(i = 0; i < NPROCQUEUE; i++){
     ptable.queue_head[i].qprev = &ptable.queue_head[i];
     ptable.queue_head[i].qnext = &ptable.queue_head[i];
 
-    // Set time slice to 10, 20, 40, 80
+    // Set time slice to 10, 20, 40, 80, ...
     ptable.queue_head[i].cpu_burst = 10 * (1 << i);
   }
   initlock(&ptable.lock, "ptable");
@@ -337,11 +337,12 @@ wait(void)
         p->name[0] = 0;
         p->killed = 0;
 
-        p->qlevel = 0;
+        p->q_level = 0;
         p->cpu_burst = 0;
         p->cpu_wait = 0;
         p->io_wait_time = 0;
         p->end_time = 0;
+        p->total_time = 0;
         p->qprev = 0;
         p->qnext = 0;
 
@@ -375,26 +376,61 @@ scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
+  struct proc *head;
+  struct proc *candidate;
+  int q_level;
   c->proc = 0;
-  
+
   for(;;){
     // Enable interrupts on this processor.
     sti();
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
+    candidate = 0;
 
+    // Select high priority process first.
+    for(q_level = 0; q_level < NPROCQUEUE; q_level++){
+      head = &ptable.queue_head[q_level];
+      for(p = head->qnext; p != head; p = p->qnext){
+        // Select process with largest io_wait_time.
+        // If there are processes with same io_wait_time, then select later one.
+        if(
+          p->state == RUNNABLE
+          && (candidate == 0 || p->io_wait_time >= candidate->io_wait_time)
+        ) candidate = p;
+      }
+      if(candidate != 0) break;
+    }
+
+    if(candidate){
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+      c->proc = candidate;
+      switchuvm(candidate);
 
-      swtch(&(c->scheduler), p->context);
+      // head->cpu_burst is the time slice of that queue (see pinit).
+      // Run process until time slice is left and process is runnable
+      while(1){
+        candidate->state = RUNNING;
+
+        swtch(&(c->scheduler), candidate->context);
+
+        if(candidate->state != RUNNABLE) break;
+        if(candidate->cpu_burst >= ptable.queue_head[candidate->q_level].cpu_burst){
+          candidate->cpu_burst = 0;
+          if(candidate->q_level < NPROCQUEUE - 1){
+            candidate->q_level++;
+            candidate->cpu_wait = 0;
+            candidate->io_wait_time = 0;
+            proc_queue_pop(candidate);
+            proc_queue_push(&ptable.queue_head[candidate->q_level], candidate);
+          }
+          break;
+        }
+      }
+
       switchkvm();
 
       // Process is done running for now.
@@ -402,7 +438,6 @@ scheduler(void)
       c->proc = 0;
     }
     release(&ptable.lock);
-
   }
 }
 
@@ -433,11 +468,42 @@ sched(void)
 }
 
 // Give up the CPU for one scheduling round.
+// And increase cpu_wait, io_wait_time, cpu_burst of processes
+// TODO: Consider whether it is a good idea to do such jobs in here,
+// instead of scheduler.
 void
 yield(void)
 {
+  struct proc *p;
   acquire(&ptable.lock);  //DOC: yieldlock
-  myproc()->state = RUNNABLE;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == RUNNABLE){
+      p->cpu_wait++;
+    }else if(p->state == SLEEPING){
+      p->io_wait_time++;
+    }
+    // If the process has not used cpu for a certain ticks, raise its priority.
+    // Do not raise pid 1(init), 2(sh). They are exception
+    // because of assignment requirement
+    if(p->pid > 2 && p->cpu_wait + p->io_wait_time > 250 && p->q_level > 0){
+      proc_queue_pop(p);
+      proc_queue_push(&ptable.queue_head[--p->q_level], p);
+      p->cpu_burst = 0;
+      p->cpu_wait = 0;
+      p->io_wait_time = 0;
+    }
+  }
+  p = myproc();
+  p->cpu_burst++;
+  p->total_time++;
+
+  // Exit if the process uses up all quota
+  if(p->end_time >= 0 && p->end_time <= p->total_time){
+    // release(&ptable.lock);
+    p->killed = 1;  // TODO: p->killed = 1 or exit() which is better?
+  }
+
+  p->state = RUNNABLE;
   sched();
   release(&ptable.lock);
 }
