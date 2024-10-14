@@ -257,6 +257,10 @@ fork(void)
 
   np->state = RUNNABLE;
 
+#ifdef DEBUG
+  cprintf("PID: %d created\n", pid);
+#endif
+
   release(&ptable.lock);
 
   return pid;
@@ -419,6 +423,13 @@ scheduler(void)
 
         if(candidate->state != RUNNABLE) break;
         if(candidate->cpu_burst >= ptable.queue_head[candidate->q_level].cpu_burst){
+#ifdef DEBUG
+          cprintf(
+            "PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+            candidate->pid, candidate->cpu_burst, candidate->q_level,
+            candidate->total_time, candidate->end_time
+          );
+#endif
           candidate->cpu_burst = 0;
           if(candidate->q_level < NPROCQUEUE - 1){
             candidate->q_level++;
@@ -491,6 +502,9 @@ yield(void)
       p->cpu_burst = 0;
       p->cpu_wait = 0;
       p->io_wait_time = 0;
+#ifdef DEBUG
+      cprintf("PID: %d Aging\n", p->pid);
+#endif
     }
   }
   p = myproc();
@@ -501,6 +515,14 @@ yield(void)
   if(p->end_time >= 0 && p->end_time <= p->total_time){
     // release(&ptable.lock);
     p->killed = 1;  // TODO: p->killed = 1 or exit() which is better?
+#ifdef DEBUG
+    cprintf(
+      "PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+      p->pid, p->cpu_burst, p->q_level,
+      p->total_time, p->end_time
+    );
+    cprintf("PID: %d, used %d ticks. terminated\n", p->pid, p->total_time);
+#endif
   }
 
   p->state = RUNNABLE;
@@ -630,6 +652,7 @@ procdump(void)
   };
   int i;
   struct proc *p;
+  struct proc *head;
   char *state;
   uint pc[10];
 
@@ -640,12 +663,26 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
+    cprintf(
+      "%d %s %s q: %d burst: %d wait: %d io_wait: %d end: %d",
+      p->pid, state, p->name, p->q_level,
+      p->cpu_burst, p->cpu_wait, p->io_wait_time, p->end_time
+    );
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
         cprintf(" %p", pc[i]);
     }
     cprintf("\n");
+  }
+
+  for(i = 0; i < 4; i++){
+    head = &ptable.queue_head[i];
+    cprintf("q %d ts: %d\n", i, head->cpu_burst);
+    for(p = head->qnext; p != head; p = p->qnext){
+      cprintf("%d burst: %d wait: %d io_wait: %d end: %d\n",
+        p->pid, p->cpu_burst, p->cpu_wait, p->io_wait_time, p->end_time
+      );
+    }
   }
 }
