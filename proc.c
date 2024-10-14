@@ -635,6 +635,33 @@ kill(int pid)
   return -1;
 }
 
+void
+setprocinfo(
+  uint q_level, uint cpu_burst, uint cpu_wait, uint io_wait_time, int end_time
+) {
+  struct proc *p;
+
+  acquire(&ptable.lock);
+  p = myproc();
+
+  if(q_level >= NPROCQUEUE) q_level = NPROCQUEUE - 1;
+
+  p->q_level = q_level;
+  proc_queue_pop(p);
+  proc_queue_push(&ptable.queue_head[q_level], p);
+
+  p->cpu_burst = cpu_burst;
+  p->cpu_wait = cpu_wait;
+  p->io_wait_time = io_wait_time;
+  p->end_time = end_time;
+
+#ifdef DEBUG
+  cprintf("Set process %d's info complete\n", p->pid);
+#endif
+
+  release(&ptable.lock);
+}
+
 //PAGEBREAK: 36
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.

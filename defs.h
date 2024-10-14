@@ -114,7 +114,7 @@ void            pinit(void);
 void            procdump(void);
 void            scheduler(void) __attribute__((noreturn));
 void            sched(void);
-void            setproc(struct proc*);
+void            setprocinfo(uint, uint, uint, uint, int);
 void            sleep(void*, struct spinlock*);
 void            userinit(void);
 int             wait(void);
