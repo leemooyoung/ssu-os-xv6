@@ -28,6 +28,8 @@ proc_queue_pop(struct proc *p)
 {
   p->qprev->qnext = p->qnext;
   p->qnext->qprev = p->qprev;
+  p->qprev = 0;
+  p->qnext = 0;
 }
 
 // The ptable lock must be held.
@@ -367,6 +369,42 @@ wait(void)
   }
 }
 
+// Update process's schedule related properties for one tick
+// and increase process's priority by aging policy
+void
+updateptable(void)
+{
+  struct proc *p;
+  acquire(&ptable.lock);
+
+  // increase cpu_wait, io_wait_time, cpu_burst, total_time of processes
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == RUNNABLE){
+      p->cpu_wait++;
+    }else if(p->state == SLEEPING){
+      p->io_wait_time++;
+    }else if(p->state == RUNNING){
+      p->cpu_burst++;
+      p->total_time++;
+    }
+    // If the process has not used cpu for a certain ticks, raise its priority.
+    // Do not raise pid 1(init), 2(sh). They are exception
+    // because of assignment requirement
+    if(p->pid > 2 && p->cpu_wait + p->io_wait_time > 250 && p->q_level > 0){
+      proc_queue_pop(p);
+      proc_queue_push(&ptable.queue_head[--p->q_level], p);
+      p->cpu_burst = 0;
+      p->cpu_wait = 0;
+      p->io_wait_time = 0;
+#ifdef DEBUG
+      cprintf("PID: %d Aging\n", p->pid);
+#endif
+    }
+  }
+
+  release(&ptable.lock);
+}
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -422,6 +460,24 @@ scheduler(void)
         swtch(&(c->scheduler), candidate->context);
 
         if(candidate->state != RUNNABLE) break;
+        // if process state is RUNNABLE, it must have been switched from yield
+        // So below codes are run ones per one tick
+
+        // Exit if the process uses up all quota
+        if(candidate->end_time >= 0 && candidate->end_time <= candidate->total_time){
+#ifdef DEBUG
+          cprintf(
+            "PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+            candidate->pid, candidate->cpu_burst, candidate->q_level,
+            candidate->total_time, candidate->end_time
+          );
+          cprintf("PID: %d, used %d ticks. terminated\n", candidate->pid, candidate->total_time);
+#endif
+          candidate->killed = 1;
+          break;
+        }
+
+        // Decrease priority if the process uses up all time slice
         if(candidate->cpu_burst >= ptable.queue_head[candidate->q_level].cpu_burst){
 #ifdef DEBUG
           cprintf(
@@ -479,53 +535,11 @@ sched(void)
 }
 
 // Give up the CPU for one scheduling round.
-// And increase cpu_wait, io_wait_time, cpu_burst of processes
-// TODO: Consider whether it is a good idea to do such jobs in here,
-// instead of scheduler.
 void
 yield(void)
 {
-  struct proc *p;
   acquire(&ptable.lock);  //DOC: yieldlock
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->state == RUNNABLE){
-      p->cpu_wait++;
-    }else if(p->state == SLEEPING){
-      p->io_wait_time++;
-    }
-    // If the process has not used cpu for a certain ticks, raise its priority.
-    // Do not raise pid 1(init), 2(sh). They are exception
-    // because of assignment requirement
-    if(p->pid > 2 && p->cpu_wait + p->io_wait_time > 250 && p->q_level > 0){
-      proc_queue_pop(p);
-      proc_queue_push(&ptable.queue_head[--p->q_level], p);
-      p->cpu_burst = 0;
-      p->cpu_wait = 0;
-      p->io_wait_time = 0;
-#ifdef DEBUG
-      cprintf("PID: %d Aging\n", p->pid);
-#endif
-    }
-  }
-  p = myproc();
-  p->cpu_burst++;
-  p->total_time++;
-
-  // Exit if the process uses up all quota
-  if(p->end_time >= 0 && p->end_time <= p->total_time){
-    // release(&ptable.lock);
-    p->killed = 1;  // TODO: p->killed = 1 or exit() which is better?
-#ifdef DEBUG
-    cprintf(
-      "PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
-      p->pid, p->cpu_burst, p->q_level,
-      p->total_time, p->end_time
-    );
-    cprintf("PID: %d, used %d ticks. terminated\n", p->pid, p->total_time);
-#endif
-  }
-
-  p->state = RUNNABLE;
+  myproc()->state = RUNNABLE;
   sched();
   release(&ptable.lock);
 }

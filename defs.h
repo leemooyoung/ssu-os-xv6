@@ -116,6 +116,7 @@ void            scheduler(void) __attribute__((noreturn));
 void            sched(void);
 void            setprocinfo(uint, uint, uint, uint, int);
 void            sleep(void*, struct spinlock*);
+void            updateptable(void);
 void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
