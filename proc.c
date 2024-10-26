@@ -104,6 +104,7 @@ myproc(void) {
 static struct proc*
 allocproc(void)
 {
+  struct proc *curproc;
   struct proc *p;
   char *sp;
 
@@ -121,10 +122,11 @@ found:
   p->pid = nextpid++;
   p->end_time = -1;
 
+  curproc = myproc();
+
   // Due of the requirement of assignment, init and sh process must always be at
-  // the lowest priority. Instead of using process name to implement this,
-  // I used pid. Because proc.name is for debugging purpose.
-  if(p->pid < 3){
+  // the lowest priority.
+  if(curproc == 0 || curproc == initproc){
     proc_queue_push(&ptable.queue_head[3], p);
   }else{
     proc_queue_push(&ptable.queue_head[0], p);
