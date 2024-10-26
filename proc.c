@@ -119,8 +119,6 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
-
-  // TODO: wait or pinit or allocproc(here), which place is better to perform this?
   p->end_time = -1;
 
   // Due of the requirement of assignment, init and sh process must always be at
@@ -260,7 +258,8 @@ fork(void)
   np->state = RUNNABLE;
 
 #ifdef DEBUG
-  cprintf("PID: %d created\n", pid);
+  if(curproc != initproc && curproc->parent != initproc)
+    cprintf("PID: %d created\n", pid);
 #endif
 
   release(&ptable.lock);
@@ -311,6 +310,19 @@ exit(void)
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
   proc_queue_pop(curproc);
+#ifdef DEBUG
+  if(curproc->parent != initproc && curproc->parent->parent != initproc){
+    cprintf(
+      "PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+      curproc->pid, curproc->cpu_burst, curproc->q_level,
+      curproc->total_time, curproc->end_time
+    );
+    cprintf(
+      "PID: %d, used %d ticks. terminated\n",
+      curproc->pid, curproc->total_time
+    );
+  }
+#endif
   sched();
   panic("zombie exit");
 }
@@ -388,16 +400,20 @@ updateptable(void)
       p->total_time++;
     }
     // If the process has not used cpu for a certain ticks, raise its priority.
-    // Do not raise pid 1(init), 2(sh). They are exception
+    // Do not raise priority of init, sh process. They are exception
     // because of assignment requirement
-    if(p->pid > 2 && p->cpu_wait + p->io_wait_time > 250 && p->q_level > 0){
+    if(
+      p != initproc && p->parent != initproc
+      && p->cpu_wait + p->io_wait_time > 250 && p->q_level > 0
+    ){
       proc_queue_pop(p);
       proc_queue_push(&ptable.queue_head[--p->q_level], p);
       p->cpu_burst = 0;
       p->cpu_wait = 0;
       p->io_wait_time = 0;
 #ifdef DEBUG
-      cprintf("PID: %d Aging\n", p->pid);
+      if(p->parent->parent != initproc)
+        cprintf("PID: %d Aging\n", p->pid);
 #endif
     }
   }
@@ -445,65 +461,72 @@ scheduler(void)
       if(candidate != 0) break;
     }
 
-    if(candidate){
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = candidate;
-      switchuvm(candidate);
+    if(candidate == 0){
+      release(&ptable.lock);
+      continue;
+    }
 
-      // head->cpu_burst is the time slice of that queue (see pinit).
-      // Run process until time slice is left and process is runnable
-      while(1){
-        candidate->state = RUNNING;
+    // Switch to chosen process.  It is the process's job
+    // to release ptable.lock and then reacquire it
+    // before jumping back to us.
+    c->proc = candidate;
+    switchuvm(candidate);
 
-        swtch(&(c->scheduler), candidate->context);
+    // head->cpu_burst is the time slice of that queue (see pinit).
+    // Run process until time slice is left and process is runnable
+    while(1){
+      candidate->state = RUNNING;
 
-        if(candidate->state != RUNNABLE) break;
-        // if process state is RUNNABLE, it must have been switched from yield
-        // So below codes are run ones per one tick
+      swtch(&(c->scheduler), candidate->context);
 
-        // Exit if the process uses up all quota
-        if(candidate->end_time >= 0 && candidate->end_time <= candidate->total_time){
-#ifdef DEBUG
-          cprintf(
-            "PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
-            candidate->pid, candidate->cpu_burst, candidate->q_level,
-            candidate->total_time, candidate->end_time
-          );
-          cprintf("PID: %d, used %d ticks. terminated\n", candidate->pid, candidate->total_time);
-#endif
-          candidate->killed = 1;
-          break;
-        }
+      if(candidate->state != RUNNABLE) break;
+      // if process state is RUNNABLE, it must have been switched from yield
+      // So below codes are run ones per one tick
 
-        // Decrease priority if the process uses up all time slice
-        if(candidate->cpu_burst >= ptable.queue_head[candidate->q_level].cpu_burst){
-#ifdef DEBUG
-          cprintf(
-            "PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
-            candidate->pid, candidate->cpu_burst, candidate->q_level,
-            candidate->total_time, candidate->end_time
-          );
-#endif
-          candidate->cpu_burst = 0;
-          if(candidate->q_level < NPROCQUEUE - 1){
-            candidate->q_level++;
-            candidate->cpu_wait = 0;
-            candidate->io_wait_time = 0;
-            proc_queue_pop(candidate);
-            proc_queue_push(&ptable.queue_head[candidate->q_level], candidate);
-          }
-          break;
-        }
+      // Exit if the process uses up all quota
+      if(
+        candidate->end_time >= 0
+        && candidate->end_time <= candidate->total_time
+      ){
+        candidate->killed = 1;
+        continue;
       }
 
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
+      // Decrease priority if the process uses up all time slice
+      if(
+        candidate->cpu_burst
+        >= ptable.queue_head[candidate->q_level].cpu_burst
+      ){
+#ifdef DEBUG
+        if(
+          candidate != initproc
+          && candidate->parent != initproc
+          && candidate->parent->parent != initproc
+        ){
+          cprintf(
+            "PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+            candidate->pid, candidate->cpu_burst, candidate->q_level,
+            candidate->total_time, candidate->end_time
+          );
+        }
+#endif
+        candidate->cpu_burst = 0;
+        if(candidate->q_level < NPROCQUEUE - 1){
+          candidate->q_level++;
+          candidate->cpu_wait = 0;
+          candidate->io_wait_time = 0;
+          proc_queue_pop(candidate);
+          proc_queue_push(&ptable.queue_head[candidate->q_level], candidate);
+        }
+        break;
+      }
     }
+
+    switchkvm();
+
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    c->proc = 0;
     release(&ptable.lock);
   }
 }
@@ -667,6 +690,7 @@ setprocinfo(
   p->cpu_burst = cpu_burst;
   p->cpu_wait = cpu_wait;
   p->io_wait_time = io_wait_time;
+  p->total_time = 0;
   p->end_time = end_time;
 
 #ifdef DEBUG
