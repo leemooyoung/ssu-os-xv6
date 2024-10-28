@@ -128,6 +128,7 @@ found:
   // the lowest priority.
   if(curproc == 0 || curproc == initproc){
     proc_queue_push(&ptable.queue_head[3], p);
+    p->q_level = 3;
   }else{
     proc_queue_push(&ptable.queue_head[0], p);
   }
