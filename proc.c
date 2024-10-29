@@ -477,52 +477,35 @@ scheduler(void)
 
     // head->cpu_burst is the time slice of that queue (see pinit).
     // Run process until time slice is left and process is runnable
-    while(1){
-      candidate->state = RUNNING;
+    candidate->state = RUNNING;
 
-      swtch(&(c->scheduler), candidate->context);
+    swtch(&(c->scheduler), candidate->context);
 
-      if(candidate->state != RUNNABLE) break;
-      // if process state is RUNNABLE, it must have been switched from yield
-      // So below codes are run ones per one tick
-
-      // Exit if the process uses up all quota
-      if(
-        candidate->end_time >= 0
-        && candidate->end_time <= candidate->total_time
-      ){
-        candidate->killed = 1;
-        continue;
-      }
-
-      // Decrease priority if the process uses up all time slice
-      if(
-        candidate->cpu_burst
-        >= ptable.queue_head[candidate->q_level].cpu_burst
-      ){
+    // if process state is RUNNABLE, it must have been switched from yield
+    // Decrease priority because the process uses up all time slice
+    if(candidate->state == RUNNABLE){
 #ifdef DEBUG
-        if(
-          candidate != initproc
-          && candidate->parent != initproc
-          && candidate->parent->parent != initproc
-        ){
-          cprintf(
-            "PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
-            candidate->pid, candidate->cpu_burst, candidate->q_level,
-            candidate->total_time, candidate->end_time
-          );
-        }
-#endif
-        candidate->cpu_burst = 0;
-        if(candidate->q_level < NPROCQUEUE - 1){
-          candidate->q_level++;
-          candidate->cpu_wait = 0;
-          candidate->io_wait_time = 0;
-          proc_queue_pop(candidate);
-          proc_queue_push(&ptable.queue_head[candidate->q_level], candidate);
-        }
-        break;
+      if(
+        candidate != initproc
+        && candidate->parent != initproc
+        && candidate->parent->parent != initproc
+      ){
+        cprintf(
+          "PID: %d uses %d ticks in mlfq[%d], total(%d/%d)\n",
+          candidate->pid, candidate->cpu_burst, candidate->q_level,
+          candidate->total_time, candidate->end_time
+        );
       }
+#endif
+      candidate->cpu_burst = 0;
+      if(candidate->q_level < NPROCQUEUE - 1){
+        candidate->q_level++;
+        candidate->cpu_wait = 0;
+        candidate->io_wait_time = 0;
+        proc_queue_pop(candidate);
+        proc_queue_push(&ptable.queue_head[candidate->q_level], candidate);
+      }
+
     }
 
     switchkvm();
@@ -564,6 +547,16 @@ sched(void)
 void
 yield(void)
 {
+  struct proc *curproc = myproc();
+
+  // Exit if the process uses up all quota
+  if(curproc->end_time >= 0 && curproc->end_time <= curproc->total_time)
+    exit();
+
+  // Return if time slice in queue left
+  if(curproc->cpu_burst < ptable.queue_head[curproc->q_level].cpu_burst)
+    return;
+
   acquire(&ptable.lock);  //DOC: yieldlock
   myproc()->state = RUNNABLE;
   sched();
