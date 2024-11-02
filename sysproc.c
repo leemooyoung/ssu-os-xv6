@@ -57,6 +57,12 @@ sys_sbrk(void)
 }
 
 int
+sys_ssusbrk(void)
+{
+  return -1;
+}
+
+int
 sys_sleep(void)
 {
   int n;
@@ -88,4 +94,10 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+int
+sys_memstat(void)
+{
+  return -1;
 }
