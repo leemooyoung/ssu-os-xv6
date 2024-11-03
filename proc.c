@@ -189,6 +189,7 @@ lazygrowproc(int n, int t)
     // if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
     //   return -1;
   }
+  curproc->lazypg += sz / PGSIZE - curproc->sz / PGSIZE;
   curproc->sz = sz;
   switchuvm(curproc);
   return 0;
@@ -314,6 +315,7 @@ wait(void)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
+        p->lazypg = 0;
         p->state = UNUSED;
         release(&ptable.lock);
         return pid;
@@ -526,7 +528,10 @@ memstat(void)
   pte_t *pte;
 
   curproc = myproc();
-  cprintf("vp: %d, pp: %d\n", curproc->sz / PGSIZE, curproc->sz / PGSIZE);
+  cprintf(
+    "vp: %d, pp: %d\n",
+    curproc->sz / PGSIZE, curproc->sz / PGSIZE - curproc->lazypg
+  );
 
   pgdir = curproc->pgdir;
   for(pde = pgdir; pde < &pgdir[PDX(KERNBASE)]; pde++){
