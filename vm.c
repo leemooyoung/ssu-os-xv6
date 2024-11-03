@@ -290,6 +290,30 @@ lazyallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   return newsz;
 }
 
+int
+completelazyalloc(struct proc *curproc, void *va)
+{
+  char *mem;
+  pte_t *pte;
+
+  if(curproc)
+    pte = walkpgdir(curproc->pgdir, va, 0);
+  else
+    pte = walkpgdir(kpgdir, va, 0);
+
+  if(pte == 0 || *pte & PTE_P || !(*pte & PTE_L))
+    return -1;
+
+  mem = kalloc();
+  // TODO: do schedule(sleep until memory available) or swap or something..
+  if(mem == 0)
+    return -1;
+
+  memset(mem, 0, PGSIZE);
+  *pte = (V2P(mem) | PTE_FLAGS(*pte) | PTE_P) & ~PTE_L;
+  return 0;
+}
+
 // Deallocate user pages to bring the process size from oldsz to
 // newsz.  oldsz and newsz need not be page-aligned, nor does newsz
 // need to be less than oldsz.  oldsz can be larger than the actual
