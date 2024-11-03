@@ -79,6 +79,27 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
   return 0;
 }
 
+static int
+lazymappages(pde_t *pgdir, void *va, uint size, int perm)
+{
+  char *a, *last;
+  pte_t *pte;
+
+  a = (char*)PGROUNDDOWN((uint)va);
+  last = (char*)PGROUNDDOWN(((uint)va) + size - 1);
+  for(;;){
+    if((pte = walkpgdir(pgdir, a, 1)) == 0)
+      return -1;
+    if(*pte & PTE_P || *pte & PTE_L)
+      panic("remap lazy");
+    *pte = perm | PTE_L;
+    if(a == last)
+      break;
+    a += PGSIZE;
+  }
+  return 0;
+}
+
 // There is one page table per process, plus one that's used when
 // a CPU is not running any process (kpgdir). The kernel uses the
 // current process's page table during system calls and interrupts;
@@ -242,6 +263,27 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       cprintf("allocuvm out of memory (2)\n");
       deallocuvm(pgdir, newsz, oldsz);
       kfree(mem);
+      return 0;
+    }
+  }
+  return newsz;
+}
+
+int
+lazyallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
+{
+  uint a;
+
+  if(newsz >= KERNBASE)
+    return 0;
+  if(newsz < oldsz)
+    return oldsz;
+
+  a = PGROUNDUP(oldsz);
+  for(; a < newsz; a += PGSIZE){
+    if(lazymappages(pgdir, (char*)a, PGSIZE, PTE_W|PTE_U) < 0){
+      cprintf("lazyallocuvm out of memory\n");
+      deallocuvm(pgdir, newsz, oldsz);
       return 0;
     }
   }

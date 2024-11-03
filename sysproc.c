@@ -59,7 +59,19 @@ sys_sbrk(void)
 int
 sys_ssusbrk(void)
 {
-  return -1;
+  int addr;
+  int n;
+  int t;
+
+  if(
+    argint(0, &n) < 0 || n == 0 || n % PGSIZE
+    || argint(1, &t) < 0 || (n < 0 && t < 0)
+  ) return -1;
+
+  addr = myproc()->sz;
+  if(lazygrowproc(n, t) < 0)
+    return -1;
+  return addr;
 }
 
 int

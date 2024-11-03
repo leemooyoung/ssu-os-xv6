@@ -3,7 +3,7 @@
 #include "user.h"
 
 void _error(const char *msg) {
-    printf(1, "%s\nalloc_test failed...\n");
+    printf(1, "%s\nalloc_test failed...\n", msg);
     exit();
 }
 
