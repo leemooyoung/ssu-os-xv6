@@ -496,6 +496,36 @@ kill(int pid)
   return -1;
 }
 
+void
+memstat(void)
+{
+  struct proc *curproc = myproc();
+  pde_t *pgdir;
+  pde_t *pde;
+  pte_t *pgtab;
+  pte_t *pte;
+
+  curproc = myproc();
+  cprintf("vp: %d, pp: %d\n", curproc->sz / PGSIZE, curproc->sz / PGSIZE);
+
+  pgdir = curproc->pgdir;
+  for(pde = pgdir; pde < &pgdir[PDX(KERNBASE)]; pde++){
+    if(!(*pde & PTE_P) || !(*pde & PTE_U))
+      continue;
+
+    cprintf("PDE - 0x%x\n", *pde);
+    cprintf("PTE");
+    pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
+    for(pte = pgtab; pte < &pgtab[NPTENTRIES]; pte++){
+      if(!(*pte & PTE_P) || !(*pte & PTE_U))
+        continue;
+
+      cprintf(" - 0x%x", *pte);
+    }
+    cprintf("\n");
+  }
+}
+
 //PAGEBREAK: 36
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.

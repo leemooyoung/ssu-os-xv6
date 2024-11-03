@@ -99,5 +99,6 @@ sys_uptime(void)
 int
 sys_memstat(void)
 {
-  return -1;
+  memstat();
+  return 0;
 }
