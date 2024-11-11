@@ -3,6 +3,7 @@
 // Output is written to the screen and serial port.
 
 #include "types.h"
+#include "date.h"
 #include "defs.h"
 #include "param.h"
 #include "traps.h"
@@ -25,7 +26,7 @@ static struct {
 } cons;
 
 static void
-printint(int xx, int base, int sign)
+printint(int xx, int base, int sign, int pad)
 {
   static char digits[] = "0123456789abcdef";
   char buf[16];
@@ -40,7 +41,13 @@ printint(int xx, int base, int sign)
   i = 0;
   do{
     buf[i++] = digits[x % base];
+    pad--;
   }while((x /= base) != 0);
+
+  while(pad > 0 && i < 15){
+    buf[i++] = '0';
+    pad--;
+  }
 
   if(sign)
     buf[i++] = '-';
@@ -48,9 +55,25 @@ printint(int xx, int base, int sign)
   while(--i >= 0)
     consputc(buf[i]);
 }
+
+static void
+printdate(struct rtcdate *date)
+{
+  printint(date->year, 10, 0, 4);
+  consputc('-');
+  printint(date->month, 10, 0, 2);
+  consputc('-');
+  printint(date->day, 10, 0, 2);
+  consputc(' ');
+  printint(date->hour, 10, 0, 2);
+  consputc(':');
+  printint(date->minute, 10, 0, 2);
+  consputc(':');
+  printint(date->second, 10, 0, 2);
+}
 //PAGEBREAK: 50
 
-// Print to the console. only understands %d, %x, %p, %s.
+// Print to the console. only understands %d, %x, %p, %s, %t.
 void
 cprintf(char *fmt, ...)
 {
@@ -76,17 +99,20 @@ cprintf(char *fmt, ...)
       break;
     switch(c){
     case 'd':
-      printint(*argp++, 10, 1);
+      printint(*argp++, 10, 1, 0);
       break;
     case 'x':
     case 'p':
-      printint(*argp++, 16, 0);
+      printint(*argp++, 16, 0, 0);
       break;
     case 's':
       if((s = (char*)*argp++) == 0)
         s = "(null)";
       for(; *s; s++)
         consputc(*s);
+      break;
+    case 't':
+      printdate(*(struct rtcdate **)argp++);
       break;
     case '%':
       consputc('%');
