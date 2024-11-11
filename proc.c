@@ -186,10 +186,9 @@ lazygrowproc(int n, int t)
   if(n > 0){
     if((sz = lazyallocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
-    curproc->lazyallocpg += sz / PGSIZE - curproc->sz / PGSIZE;
     curproc->sz = sz;
   } else if(n < 0){
-    curproc->lazydeallocpg += -n / PGSIZE;
+    curproc->lazydeallocsz += -n;
     curproc->lazydealloctick = t;
     cmostime(&date);
     cprintf("Memory deallocation request(%d): %t\n", t, &date);
@@ -210,8 +209,8 @@ checklazygrowproc(void)
     if(p->lazydealloctick > 0){
       p->lazydealloctick--;
       if(p->lazydealloctick == 0){
-        p->sz = deallocuvm(p->pgdir, p->sz, p->sz - p->lazydeallocpg * PGSIZE);
-        p->lazydeallocpg = 0;
+        p->sz = deallocuvm(p->pgdir, p->sz, p->sz - p->lazydeallocsz);
+        p->lazydeallocsz = 0;
         cmostime(&date);
         cprintf("Memory deallocation execute: %t\n", &date);
         memstat();
@@ -342,7 +341,8 @@ wait(void)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
-        p->lazyallocpg = 0;
+        p->lazydeallocsz = 0;
+        p->lazydealloctick = 0;
         p->state = UNUSED;
         release(&ptable.lock);
         return pid;
@@ -554,11 +554,21 @@ memstat(void)
   pte_t *pgtab;
   pte_t *pte;
 
-  curproc = myproc();
-  cprintf(
-    "vp: %d, pp: %d\n",
-    curproc->sz / PGSIZE, curproc->sz / PGSIZE - curproc->lazyallocpg
-  );
+  uint vpg = curproc->sz / PGSIZE;
+  uint lazypg = 0;;
+
+  pgdir = curproc->pgdir;
+  for(pde = pgdir; pde < &pgdir[PDX(KERNBASE)]; pde++){
+    if(!(*pde & PTE_P) || !(*pde & PTE_U))
+      continue;
+
+    pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
+    for(pte = pgtab; pte < &pgtab[NPTENTRIES]; pte++)
+      if((*pte & PTE_L) && (*pte & PTE_U))
+        lazypg++;
+  }
+
+  cprintf("vp: %d, pp: %d\n", vpg, vpg - lazypg);
 
   pgdir = curproc->pgdir;
   for(pde = pgdir; pde < &pgdir[PDX(KERNBASE)]; pde++){
