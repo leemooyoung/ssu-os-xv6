@@ -103,12 +103,13 @@ int             pipewrite(struct pipe*, char*, int);
 
 //PAGEBREAK: 16
 // proc.c
+void            checklazygrowproc(void);
 int             cpuid(void);
 void            exit(void);
 int             fork(void);
 int             growproc(int);
-int             lazygrowproc(int, int);
 int             kill(int);
+int             lazygrowproc(int, int);
 struct cpu*     mycpu(void);
 struct proc*    myproc();
 void            pinit(void);

@@ -37,7 +37,9 @@ enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 // Per-process state
 struct proc {
   uint sz;                     // Size of process virtual memory (bytes)
-  uint lazypg;                 // Number of lazy allocated page
+  uint lazyallocpg;            // Number of lazy allocated page
+  uint lazydeallocpg;          // Number of pages reserved for lazy deallocation
+  uint lazydealloctick;        // Ticks left to lazy page deallocation
   pde_t* pgdir;                // Page table
   char *kstack;                // Bottom of kernel stack for this process
   enum procstate state;        // Process state

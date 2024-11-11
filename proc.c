@@ -1,4 +1,5 @@
 #include "types.h"
+#include "date.h"
 #include "defs.h"
 #include "param.h"
 #include "memlayout.h"
@@ -179,20 +180,46 @@ lazygrowproc(int n, int t)
 {
   uint sz;
   struct proc *curproc = myproc();
+  struct rtcdate date;
 
   sz = curproc->sz;
   if(n > 0){
     if((sz = lazyallocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
+    curproc->lazyallocpg += sz / PGSIZE - curproc->sz / PGSIZE;
+    curproc->sz = sz;
   } else if(n < 0){
-    return -1;
-    // if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
-    //   return -1;
+    curproc->lazydeallocpg += -n / PGSIZE;
+    curproc->lazydealloctick = t;
+    cmostime(&date);
+    cprintf("Memory deallocation request(%d): %t\n", t, &date);
+    return 0;
   }
-  curproc->lazypg += sz / PGSIZE - curproc->sz / PGSIZE;
-  curproc->sz = sz;
   switchuvm(curproc);
   return 0;
+}
+
+void
+checklazygrowproc(void)
+{
+  struct proc *p;
+  struct rtcdate date;
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->lazydealloctick > 0){
+      p->lazydealloctick--;
+      if(p->lazydealloctick == 0){
+        p->sz = deallocuvm(p->pgdir, p->sz, p->sz - p->lazydeallocpg * PGSIZE);
+        p->lazydeallocpg = 0;
+        cmostime(&date);
+        cprintf("Memory deallocation execute: %t\n", &date);
+        memstat();
+        p->killed = 1;
+      }
+    }
+  }
+  release(&ptable.lock);
 }
 
 // Create a new process copying p as the parent.
@@ -315,7 +342,7 @@ wait(void)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
-        p->lazypg = 0;
+        p->lazyallocpg = 0;
         p->state = UNUSED;
         release(&ptable.lock);
         return pid;
@@ -530,7 +557,7 @@ memstat(void)
   curproc = myproc();
   cprintf(
     "vp: %d, pp: %d\n",
-    curproc->sz / PGSIZE, curproc->sz / PGSIZE - curproc->lazypg
+    curproc->sz / PGSIZE, curproc->sz / PGSIZE - curproc->lazyallocpg
   );
 
   pgdir = curproc->pgdir;

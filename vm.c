@@ -311,7 +311,7 @@ completelazyalloc(struct proc *curproc, void *va)
 
   memset(mem, 0, PGSIZE);
   *pte = (V2P(mem) | PTE_FLAGS(*pte) | PTE_P) & ~PTE_L;
-  myproc()->lazypg--;
+  myproc()->lazyallocpg--;
   return 0;
 }
 
@@ -331,7 +331,7 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   a = PGROUNDUP(newsz);
   for(; a  < oldsz; a += PGSIZE){
     pte = walkpgdir(pgdir, (char*)a, 0);
-    if(!pte)
+    if(!pte) // there is no PDE.. skip to next PDE
       a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
     else if((*pte & PTE_P) != 0){
       pa = PTE_ADDR(*pte);
@@ -339,6 +339,8 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         panic("kfree");
       char *v = P2V(pa);
       kfree(v);
+      *pte = 0;
+    }else if((*pte & PTE_L) != 0){
       *pte = 0;
     }
   }

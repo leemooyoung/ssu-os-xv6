@@ -72,6 +72,7 @@ trap(struct trapframe *tf)
       ticks++;
       wakeup(&ticks);
       release(&tickslock);
+      checklazygrowproc();
     }
     lapiceoi();
     break;
