@@ -13,9 +13,8 @@
 
 char buf[BSIZE];
 
-int lseek(int a, int b, int c) { return -1; }
-int rb_print(int a) { return -1; }
-int rb_count(int a) { return -1; }
+int rb_print(int a) { return 0; }
+int rb_count(int a) { return 0; }
 
 void _error(const char *msg) {
 	printf(1, msg);
