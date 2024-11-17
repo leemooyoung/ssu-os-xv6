@@ -363,40 +363,64 @@ iunlockput(struct inode *ip)
 // Inode content
 //
 // The content (data) associated with each inode is stored
-// in blocks on the disk. The first NDIRECT block numbers
-// are listed in ip->addrs[].  The next NINDIRECT blocks are
-// listed in block ip->addrs[NDIRECT].
+// in blocks on the disk.
+//  ip->addrs[0 to DIR_BTAB_ENT-1]:
+//    first NDIRECT block numbers are listed.
+//  ip->addrs[DIR_BTAB_ENT to S_INDIR_BTAB_ENT-1]:
+//    next N_1_INDIRECT block numbers are listed.
+//  ip->addrs[S_INDIR_BTAB_ENT to D_INDIR_BTAB_ENT-1]:
+//    next N_2_INDIRECT block numbers are listed.
+//  ip->addrs[D_INDIR_BTAB_ENT to T_INDIR_BTAB_ENT-1]:
+//    next N_3_INDIRECT block numbers are listed.
 
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
 static uint
 bmap(struct inode *ip, uint bn)
 {
-  uint addr, *a;
+  uint bn_bound[] = { NDIRECT, N_1_INDIRECT, N_2_INDIRECT, N_3_INDIRECT };
+  uint blocktable_bound[] = {
+    DIR_BTAB_ENT, S_INDIR_BTAB_ENT, D_INDIR_BTAB_ENT, T_INDIR_BTAB_ENT
+  };
+  uint offset[] = { 0, 0, 0, 0 };
+  uint lv, depth, blockpertable;
+  uint addr, *table;
   struct buf *bp;
 
-  if(bn < NDIRECT){
-    if((addr = ip->addrs[bn]) == 0)
-      ip->addrs[bn] = addr = balloc(ip->dev);
-    return addr;
+  // Calc indirect ref level
+  table = ip->addrs;
+  blockpertable = 1;
+  for(lv = 0; lv < sizeof(bn_bound) / sizeof(uint); lv++){
+    if(bn < bn_bound[lv]) break;
+    bn -= bn_bound[lv];
+    // Skip to start of next indirect ref level table
+    table += blocktable_bound[lv]; // bn_bound[lv] / blockpertable
+    blockpertable *= BPINDIRECT;
   }
-  bn -= NDIRECT;
 
-  if(bn < NINDIRECT){
-    // Load indirect block, allocating if necessary.
-    if((addr = ip->addrs[NDIRECT]) == 0)
-      ip->addrs[NDIRECT] = addr = balloc(ip->dev);
+  if(lv == sizeof(bn_bound) / sizeof(uint)) panic("bmap: out of range");
+
+  // Calc offset of each indirect ref level
+  for(depth = 0; depth <= lv; depth++){
+    offset[depth] = bn / blockpertable;
+    bn %= blockpertable;
+    blockpertable /= BPINDIRECT;
+  }
+
+  // Find disk block address, allocating indirect block if necessary.
+  if((addr = table[offset[0]]) == 0)
+    table[offset[0]] = addr = balloc(ip->dev);
+  for(depth = 1; depth <= lv; depth++){
     bp = bread(ip->dev, addr);
-    a = (uint*)bp->data;
-    if((addr = a[bn]) == 0){
-      a[bn] = addr = balloc(ip->dev);
-      log_write(bp);
+    table = (uint*)bp->data;
+    if((addr = table[offset[depth]]) == 0){
+      table[offset[depth]] = addr = balloc(ip->dev);
+      log_write(bp); // Indirect block table modified
     }
     brelse(bp);
-    return addr;
   }
 
-  panic("bmap: out of range");
+  return addr;
 }
 
 // Truncate inode (discard contents).
