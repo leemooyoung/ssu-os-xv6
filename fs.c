@@ -20,6 +20,7 @@
 #include "fs.h"
 #include "buf.h"
 #include "file.h"
+#include "redblacktree.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 static void itrunc(struct inode*);
@@ -305,6 +306,12 @@ ilock(struct inode *ip)
     ip->size = dip->size;
     memmove(ip->addrs, dip->addrs, sizeof(ip->addrs));
     brelse(bp);
+
+    if(ip->baddrcache == 0)
+      ip->baddrcache = (struct redblacktree*)kalloc();
+
+    rbtinit(ip->baddrcache);
+
     ip->valid = 1;
     if(ip->type == 0)
       panic("ilock: no type");
@@ -387,6 +394,8 @@ bmap(struct inode *ip, uint bn)
   uint addr, *table;
   struct buf *bp;
 
+  // TODO: search in redblacktree first
+
   // Calc indirect ref level
   table = ip->addrs;
   blockpertable = 1;
@@ -419,6 +428,8 @@ bmap(struct inode *ip, uint bn)
     }
     brelse(bp);
   }
+
+  // TODO: insert node to redblacktree
 
   return addr;
 }

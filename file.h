@@ -23,6 +23,8 @@ struct inode {
   short nlink;
   uint size;
   uint addrs[BTAB_ENT];
+
+  struct redblacktree *baddrcache;
 };
 
 // table mapping major device number to
