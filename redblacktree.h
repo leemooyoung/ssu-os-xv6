@@ -2,6 +2,7 @@
 
 enum RBCOLOR { RED, BLACK };
 
+// The sort order is as follows: lchild->key < key < rchild->key
 struct rbnode {
     struct rbnode *parent;
     struct rbnode *lchild;

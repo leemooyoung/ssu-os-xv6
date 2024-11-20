@@ -15,12 +15,42 @@ rbtinit(struct redblacktree *rbt)
   memset(rbt, 0, PGSIZE);
 }
 
+// Mark as most recently used.
+static void
+markmru(struct redblacktree *rbt, struct rbnode *n)
+{
+  // delete node in linked list
+  n->prev->next = n->next;
+  n->next->prev = n->prev;
+  // insert to prev of head
+  n->next = rbt->head;
+  n->prev = rbt->head->prev;
+  n->next->prev = n;
+  n->prev->next = n;
+  // set n to head
+  rbt->head = n;
+}
+
 // Binary search in red black tree
 // If update is not 0, mark the found tree node as most recently used.
 struct rbnode*
 rbtsearch(struct redblacktree *rbt, int key, int update)
 {
-  return 0;
+  struct rbnode* n;
+
+  n = rbt->root;
+  while(n != 0){
+    if(key < n->key){
+      n = n->lchild;
+    } else if(key == n->key){
+      if(update) markmru(rbt, n);
+      return n;
+    } else if(key > n->key){
+      n = n->rchild;
+    }
+  }
+
+  return n;
 }
 
 // Insert node to red black tree
