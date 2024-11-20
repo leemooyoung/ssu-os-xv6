@@ -159,19 +159,24 @@ filewrite(struct file *f, char *addr, int n)
 int
 fileseek(struct file *f, int off, int whence)
 {
-  if(off < 0)
-    return -1;
   if(f->type == FD_PIPE)
     return -1;
   if(f->type == FD_INODE){
-    if(whence == SEEK_SET)
-      return f->off = off;
-    else if(whence == SEEK_CUR)
-      return f->off += off;
-    else if(whence == SEEK_END)
-      return f->off = f->ip->size + off;
-    else
-      return -1;
+    switch(whence){
+      case SEEK_SET:
+        break;
+      case SEEK_CUR:
+        off += f->off;
+        break;
+      case SEEK_END:
+        off += f->ip->size;
+        break;
+      default:
+        return -1;
+    }
   }
-  panic("fileseek");
+  if(off < 0 || off > f->ip->size)
+    return -1;
+
+  return f->off = off;
 }
