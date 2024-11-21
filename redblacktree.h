@@ -1,12 +1,13 @@
 #define RBTREE_ENT 100
 
-enum RBCOLOR { RED, BLACK };
+enum RBCOLOR { RB_RED, RB_BLACK };
+
+enum RBCHILD { RB_LEFT, RB_RIGHT };
 
 // The sort order is as follows: lchild->key < key < rchild->key
 struct rbnode {
     struct rbnode *parent;
-    struct rbnode *lchild;
-    struct rbnode *rchild;
+    struct rbnode *child[2];
 
     struct rbnode *next;
     struct rbnode *prev;

@@ -19,7 +19,8 @@ rbtinit(struct redblacktree *rbt)
   rbt->freelist = rbt->nodes;
 }
 
-// Mark as most recently used.
+// Mark given node n as most recently used.
+// rbt->head should not be 0
 static void
 markmru(struct redblacktree *rbt, struct rbnode *n)
 {
@@ -45,16 +46,49 @@ rbtsearch(struct redblacktree *rbt, int key, int update)
   n = rbt->root;
   while(n != 0){
     if(key < n->key){
-      n = n->lchild;
+      n = n->child[RB_LEFT];
     } else if(key == n->key){
       if(update) markmru(rbt, n);
       return n;
     } else if(key > n->key){
-      n = n->rchild;
+      n = n->child[RB_RIGHT];
     }
   }
 
   return n;
+}
+
+// Delete node with the given address n from red black tree.
+static struct rbnode*
+rbtdeletenode(struct redblacktree *rbt, struct rbnode* n)
+{
+  return 0;
+}
+
+// Take node in freelist or recycle least recently used node.
+// And initialize with given parameters.
+static struct rbnode*
+rbt_node_alloc(struct redblacktree *rbt, enum RBCOLOR color, int key, int val)
+{
+  struct rbnode* freenode;
+
+  if(rbt->freelist){
+    freenode = rbt->freelist;
+    rbt->freelist = freenode->next;
+  } else {
+    freenode = rbtdeletenode(rbt, rbt->head->prev);
+  }
+
+  freenode->color = color;
+  freenode->key = key;
+  freenode->val = val;
+  freenode->parent = 0;
+  freenode->child[RB_LEFT] = 0;
+  freenode->child[RB_RIGHT] = 0;
+  freenode->next = freenode;
+  freenode->prev = freenode;
+
+  return freenode;
 }
 
 // Insert node to red black tree
@@ -66,7 +100,7 @@ rbtinsert(struct redblacktree *rbt, int key, int val)
   return 0;
 }
 
-// Delete node in red black tree.
+// Delete node from red black tree.
 struct rbnode*
 rbtdelete(struct redblacktree *rbt, int key)
 {
