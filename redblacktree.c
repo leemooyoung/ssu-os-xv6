@@ -3,16 +3,20 @@
 #include "mmu.h"
 #include "redblacktree.h"
 
-// Set memory space to 0.
+// Set memory space to 0 and init freelist
 // Caller should reserve PGSIZE memory space for red black tree.
-// If not, calls panic.
 void
 rbtinit(struct redblacktree *rbt)
 {
-  if(sizeof(struct redblacktree) > PGSIZE)
-    panic("rbtinit");
+  int i;
 
   memset(rbt, 0, PGSIZE);
+
+  // init free node list
+  for(i = 0; i < PGSIZE - 1; i++){
+    rbt->nodes[i].next = &rbt->nodes[i + 1];
+  }
+  rbt->freelist = rbt->nodes;
 }
 
 // Mark as most recently used.

@@ -173,7 +173,11 @@ void
 iinit(int dev)
 {
   int i = 0;
-  
+
+  // Check if size of struct redblacktree over PGSIZE
+  if(sizeof(struct redblacktree) > PGSIZE)
+    panic("rbtinit");
+
   initlock(&icache.lock, "icache");
   for(i = 0; i < NINODE; i++) {
     initsleeplock(&icache.inode[i].lock, "inode");

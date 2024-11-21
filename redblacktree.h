@@ -21,7 +21,7 @@ struct redblacktree {
     struct rbnode nodes[RBTREE_ENT];
     struct rbnode *root;
     struct rbnode *head;
-    struct rbnode *empty;
+    struct rbnode *freelist;
 };
 
 void rbtinit(struct redblacktree *);
