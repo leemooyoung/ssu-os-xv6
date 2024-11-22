@@ -44,6 +44,39 @@ rotate(struct rbnode *n, enum RBCHILD dir)
   if(innergrand != 0) innergrand->parent = n;
 }
 
+static struct rbnode*
+binary_search(
+  struct redblacktree *rbt,
+  int key,
+  struct rbnode **pp,
+  enum RBCHILD *dir
+) {
+  struct rbnode* n;
+
+  n = rbt->root;
+  while(n != 0){
+    if(key < n->key){
+      if(n->child[RB_LEFT] == 0){
+        if(pp) *pp = n;
+        if(dir) *dir = RB_LEFT;
+        return 0;
+      }
+      n = n->child[RB_LEFT];
+    } else if(key == n->key){
+      return n;
+    } else if(key > n->key){
+      if(n->child[RB_RIGHT] == 0){
+        if(pp) *pp = n;
+        if(dir) *dir = RB_RIGHT;
+        return 0;
+      }
+      n = n->child[RB_RIGHT];
+    }
+  }
+
+  return n;
+}
+
 // Set memory space to 0 and init freelist
 // Caller should reserve PGSIZE memory space for red black tree.
 void
@@ -84,17 +117,8 @@ rbtsearch(struct redblacktree *rbt, int key, int update)
 {
   struct rbnode* n;
 
-  n = rbt->root;
-  while(n != 0){
-    if(key < n->key){
-      n = n->child[RB_LEFT];
-    } else if(key == n->key){
-      if(update) markmru(rbt, n);
-      return n;
-    } else if(key > n->key){
-      n = n->child[RB_RIGHT];
-    }
-  }
+  n = binary_search(rbt, key, 0, 0);
+  if(n && update) markmru(rbt, n);
 
   return n;
 }
@@ -183,6 +207,7 @@ rbtinsert(struct redblacktree *rbt, int key, int val)
 {
   struct rbnode *freenode;
   struct rbnode *n;
+  struct rbnode *p;
   enum RBCHILD childpos;
 
   if(rbt->root == 0){
@@ -193,29 +218,15 @@ rbtinsert(struct redblacktree *rbt, int key, int val)
   }
 
   // search insert position
-  n = rbt->root;
-  while(n != 0){
-    if(key < n->key){
-      if(n->child[RB_LEFT] == 0){
-        childpos = RB_LEFT;
-        break;
-      }
-      n = n->child[RB_LEFT];
-    } else if(key == n->key){
-      markmru(rbt, n);
-      return n;
-    } else if(key > n->key){
-      if(n->child[RB_RIGHT] == 0){
-        childpos = RB_RIGHT;
-        break;
-      }
-      n = n->child[RB_RIGHT];
-    }
+  n = binary_search(rbt, key, &p, &childpos);
+  if(n){
+    markmru(rbt, n);
+    return n;
   }
 
   freenode = rbt_node_alloc(rbt, RB_RED, key, val);
-  freenode->parent = n;
-  n->child[childpos] = freenode;
+  freenode->parent = p;
+  p->child[childpos] = freenode;
   markmru(rbt, freenode);
 
   rbt_insert_fix(rbt, freenode);
