@@ -3,6 +3,8 @@
 #include "mmu.h"
 #include "redblacktree.h"
 
+// Binary tree operations
+
 // n->parent should not be 0
 static inline enum RBCHILD
 child_dir(struct rbnode *n)
@@ -77,21 +79,7 @@ binary_search(
   return n;
 }
 
-// Set memory space to 0 and init freelist
-// Caller should reserve PGSIZE memory space for red black tree.
-void
-rbtinit(struct redblacktree *rbt)
-{
-  int i;
-
-  memset(rbt, 0, PGSIZE);
-
-  // init free node list
-  for(i = 0; i < RBTREE_ENT - 1; i++){
-    rbt->nodes[i].next = &rbt->nodes[i + 1];
-  }
-  rbt->freelist = rbt->nodes;
-}
+// Extended operations
 
 // Mark given node n as most recently used.
 // rbt->head should not be 0
@@ -108,52 +96,6 @@ markmru(struct redblacktree *rbt, struct rbnode *n)
   n->prev->next = n;
   // set n to head
   rbt->head = n;
-}
-
-// Binary search in red black tree
-// If update is not 0, mark the found tree node as most recently used.
-struct rbnode*
-rbtsearch(struct redblacktree *rbt, int key, int update)
-{
-  struct rbnode* n;
-
-  n = binary_search(rbt, key, 0, 0);
-  if(n && update) markmru(rbt, n);
-
-  return n;
-}
-
-// Delete node with the given address n from red black tree.
-static struct rbnode*
-rbtdeletenode(struct redblacktree *rbt, struct rbnode* n)
-{
-  return 0;
-}
-
-// Take node in freelist or recycle least recently used node.
-// And initialize with given parameters.
-static struct rbnode*
-rbt_node_alloc(struct redblacktree *rbt, enum RBCOLOR color, int key, int val)
-{
-  struct rbnode* freenode;
-
-  if(rbt->freelist){
-    freenode = rbt->freelist;
-    rbt->freelist = freenode->next;
-  } else {
-    freenode = rbtdeletenode(rbt, rbt->head->prev);
-  }
-
-  freenode->color = color;
-  freenode->key = key;
-  freenode->val = val;
-  freenode->parent = 0;
-  freenode->child[RB_LEFT] = 0;
-  freenode->child[RB_RIGHT] = 0;
-  freenode->next = freenode;
-  freenode->prev = freenode;
-
-  return freenode;
 }
 
 static void
@@ -195,6 +137,76 @@ rbt_insert_fix(struct redblacktree *rbt, struct rbnode *n)
       break;
     }
   }
+}
+
+static void
+rbt_delete_fix(struct redblacktree *rbt, struct rbnode *n)
+{
+  return;
+}
+
+// Delete node with the given address n from red black tree.
+static struct rbnode*
+rbt_node_delete(struct redblacktree *rbt, struct rbnode* n)
+{
+  return 0;
+}
+
+// Take node in freelist or recycle least recently used node.
+// And initialize with given parameters.
+static struct rbnode*
+rbt_node_alloc(struct redblacktree *rbt, enum RBCOLOR color, int key, int val)
+{
+  struct rbnode* freenode;
+
+  if(rbt->freelist){
+    freenode = rbt->freelist;
+    rbt->freelist = freenode->next;
+  } else {
+    freenode = rbt_node_delete(rbt, rbt->head->prev);
+  }
+
+  freenode->color = color;
+  freenode->key = key;
+  freenode->val = val;
+  freenode->parent = 0;
+  freenode->child[RB_LEFT] = 0;
+  freenode->child[RB_RIGHT] = 0;
+  freenode->next = freenode;
+  freenode->prev = freenode;
+
+  return freenode;
+}
+
+// Red black tree API
+
+// Set memory space to 0 and init freelist
+// Caller should reserve PGSIZE memory space for red black tree.
+void
+rbtinit(struct redblacktree *rbt)
+{
+  int i;
+
+  memset(rbt, 0, PGSIZE);
+
+  // init free node list
+  for(i = 0; i < RBTREE_ENT - 1; i++){
+    rbt->nodes[i].next = &rbt->nodes[i + 1];
+  }
+  rbt->freelist = rbt->nodes;
+}
+
+// Binary search in red black tree
+// If update is not 0, mark the found tree node as most recently used.
+struct rbnode*
+rbtsearch(struct redblacktree *rbt, int key, int update)
+{
+  struct rbnode* n;
+
+  n = binary_search(rbt, key, 0, 0);
+  if(n && update) markmru(rbt, n);
+
+  return n;
 }
 
 // Insert node to red black tree
