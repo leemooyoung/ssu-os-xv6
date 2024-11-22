@@ -3,67 +3,45 @@
 #include "mmu.h"
 #include "redblacktree.h"
 
-#define SIBLING(n) \
-  ((n)->parent \
-    ? (n)->parent->child[RB_LEFT] == (n) \
-      ? (n)->parent->child[RB_RIGHT] \
-      : (n)->parent->child[RB_LEFT] \
-    : 0)
-
-// right child of n should not be leaf node. (not 0)
-static void
-rotate_left(struct rbnode *n)
+// n->parent should not be 0
+static inline enum RBCHILD
+child_dir(struct rbnode *n)
 {
-  struct rbnode *p; // parent of n
-  struct rbnode *r; // right child of n
-  struct rbnode *c; // center. left child of right child of n
-
-  p = n->parent;
-  r = n->child[RB_RIGHT];
-  c = r->child[RB_LEFT];
-
-  if(p){
-    if(p->child[RB_LEFT] == n)
-      p->child[RB_LEFT] = r;
-    else
-      p->child[RB_RIGHT] = r;
-  }
-  r->parent = p;
-
-  r->child[RB_LEFT] = n;
-  n->parent = r;
-
-  n->child[RB_RIGHT] = c;
-  if(c != 0)
-    c->parent = n;
+  if(n->parent->child[RB_LEFT] == n) return RB_LEFT;
+  return RB_RIGHT;
 }
 
-// left child of n should not be leaf node. (not 0)
-static void
-rotate_right(struct rbnode *n)
+static inline struct rbnode*
+sibling(struct rbnode *n)
 {
-  struct rbnode *p; // parent of n
-  struct rbnode *l; // left child of n
-  struct rbnode *c; // center. right child of left child of n
+  if(n->parent == 0) return 0;
 
-  p = n->parent;
-  l = n->child[RB_LEFT];
-  c = l->child[RB_RIGHT];
+  return n->parent->child[1 - child_dir(n)];
+}
 
-  if(p){
-    if(p->child[RB_LEFT] == n)
-      p->child[RB_LEFT] = l;
-    else
-      p->child[RB_RIGHT] = l;
-  }
-  l->parent = p;
+// child used in rotation should not be 0
+// rotate(n, RB_LEFT): left rotate
+// rotate(n, RB_RIGHT): right rotate
+static void
+rotate(struct rbnode *n, enum RBCHILD dir)
+{
+  struct rbnode *parent;
+  struct rbnode *child;
+  struct rbnode *innergrand;
 
-  l->child[RB_RIGHT] = n;
-  n->parent = l;
+  dir = 1 - dir;
+  parent = n->parent;
+  child = n->child[dir];
+  innergrand = child->child[1 - dir];
 
-  n->child[RB_LEFT] = c;
-  if(c != 0)
-    c->parent = n;
+  child->parent = parent;
+  if(parent) parent->child[child_dir(n)] = child;
+
+  child->child[1 - dir] = n;
+  n->parent = child;
+
+  n->child[dir] = innergrand;
+  if(innergrand != 0) innergrand->parent = n;
 }
 
 // Set memory space to 0 and init freelist
@@ -164,7 +142,7 @@ rbt_insert_fix(struct redblacktree *rbt, struct rbnode *n)
   while(1){
     parent = n->parent;
     grand = parent ? parent->parent : 0;
-    uncle = SIBLING(parent);
+    uncle = sibling(parent);
 
     if(parent == 0){
       n->color = RB_BLACK;
@@ -181,30 +159,15 @@ rbt_insert_fix(struct redblacktree *rbt, struct rbnode *n)
       // uncle is leaf node or uncle->color == RB_BLACK
       // If n is inner grandchild of grand, make n the outer grandchild of grand
       // via rotate tree at parent and switch role of parent and n
-      if(
-        (parent->child[RB_LEFT] == n)
-        && (grand->child[RB_RIGHT] == parent)
-      ){
-        rotate_right(parent);
-        n = parent;
-        parent = n->parent;
-      } else if(
-        (parent->child[RB_RIGHT] == n)
-        && (grand->child[RB_LEFT] == parent)
-      ){
-        rotate_left(parent);
+      if(child_dir(n) != child_dir(parent)){
+        rotate(parent, child_dir(parent));
         n = parent;
         parent = n->parent;
       }
-
       // n is outer grandchild of grand
       parent->color = RB_BLACK;
       grand->color = RB_RED;
-      if(grand->child[RB_LEFT] == parent)
-        rotate_right(grand);
-      else
-        rotate_left(grand);
-
+      rotate(grand, 1 - child_dir(parent));
       break;
     }
   }
