@@ -6,23 +6,23 @@ enum RBCHILD { RB_LEFT, RB_RIGHT };
 
 // The sort order is as follows: lchild->key < key < rchild->key
 struct rbnode {
-    struct rbnode *parent;
-    struct rbnode *child[2];
+  struct rbnode *parent;
+  struct rbnode *child[2];
 
-    struct rbnode *next;
-    struct rbnode *prev;
+  struct rbnode *next;
+  struct rbnode *prev;
 
-    enum RBCOLOR color;
-    int key;
-    int val;
+  enum RBCOLOR color;
+  int key;
+  int val;
 };
 
 // There is no sleeplock for struct redblacktree. Use the inode's one instead.
 struct redblacktree {
-    struct rbnode nodes[RBTREE_ENT];
-    struct rbnode *root;
-    struct rbnode *head;
-    struct rbnode *freelist;
+  struct rbnode nodes[RBTREE_ENT];
+  struct rbnode *root;
+  struct rbnode *head;
+  struct rbnode *freelist;
 };
 
 void rbtinit(struct redblacktree *);
