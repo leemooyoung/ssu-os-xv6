@@ -32,4 +32,4 @@ struct rbnode *rbtsearch(struct redblacktree *, int, int);
 
 struct rbnode *rbtinsert(struct redblacktree *, int, int);
 
-struct rbnode *rbtdelete(struct redblacktree *, int);
+int rbtdelete(struct redblacktree *, int, int *);

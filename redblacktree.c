@@ -3,6 +3,28 @@
 #include "mmu.h"
 #include "redblacktree.h"
 
+// Linked list operations
+
+// insert n1 to previous of n2
+static inline void
+list_insert(struct rbnode *n1, struct rbnode *n2)
+{
+  n1->next = n2;
+  n1->prev = n2->prev;
+  n1->next->prev = n1;
+  n1->prev->next = n1;
+}
+
+// delete n from list
+static inline void
+list_delete(struct rbnode *n)
+{
+  n->next->prev = n->prev;
+  n->prev->next = n->next;
+  // n->next = n;
+  // n->prev = n;
+}
+
 // Binary tree operations
 
 // n->parent should not be 0
@@ -86,15 +108,8 @@ binary_search(
 static void
 markmru(struct redblacktree *rbt, struct rbnode *n)
 {
-  // delete node in linked list
-  n->prev->next = n->next;
-  n->next->prev = n->prev;
-  // insert to prev of head
-  n->next = rbt->head;
-  n->prev = rbt->head->prev;
-  n->next->prev = n;
-  n->prev->next = n;
-  // set n to head
+  list_delete(n);
+  list_insert(n, rbt->head);
   rbt->head = n;
 }
 
@@ -146,10 +161,63 @@ rbt_delete_fix(struct redblacktree *rbt, struct rbnode *n)
 }
 
 // Delete node with the given address n from red black tree.
-static struct rbnode*
-rbt_node_delete(struct redblacktree *rbt, struct rbnode* n)
+static void
+rbt_node_delete(struct redblacktree *rbt, struct rbnode *n)
 {
-  return 0;
+  struct rbnode *successor;
+
+  // If n has two child, replace n with successor
+  // which is leftmost node of right subtree of n,
+  // and delete successor instead
+  if(n->child[RB_LEFT] && n->child[RB_RIGHT]){
+    // find successor
+    successor = n->child[RB_RIGHT];
+    while(successor->child[RB_LEFT])
+      successor = successor->child[RB_LEFT];
+
+    // insert n in place of successor in linked list
+    list_delete(n);
+    list_insert(n, successor);
+    list_delete(successor);
+    // replace key and val of n to successor's
+    n->key = successor->key;
+    n->val = successor->val;
+    // delete successor instead
+    n = successor;
+  }
+
+  // n has 0 child
+  if(n->child[RB_LEFT] == 0 && n->child[RB_RIGHT] == 0){
+    if(rbt->root == n){
+      rbt->root = 0;
+      rbt->head = 0;
+    } else if(n->color == RB_RED){
+      n->parent->child[child_dir(n)] = 0;
+      list_delete(n);
+    } else {
+      // n->color == RB_BLACK
+      // TODO: delete node and fix red black tree
+      rbt_delete_fix(rbt, n);
+    }
+  } else { // n has 1 child. color of n is RB_BLACK, color of child is RB_RED
+    successor = n->child[RB_LEFT];
+    n->child[RB_LEFT] = 0;
+    if(successor == 0){
+      successor = n->child[RB_RIGHT];
+      n->child[RB_RIGHT] = 0;
+    }
+
+    list_delete(n);
+    list_insert(n, successor);
+    list_delete(successor);
+    n->key = successor->key;
+    n->val = successor->val;
+
+    n = successor; // free successor instead
+  }
+
+  n->next = rbt->freelist;
+  rbt->freelist = n;
 }
 
 // Take node in freelist or recycle least recently used node.
@@ -159,12 +227,11 @@ rbt_node_alloc(struct redblacktree *rbt, enum RBCOLOR color, int key, int val)
 {
   struct rbnode* freenode;
 
-  if(rbt->freelist){
-    freenode = rbt->freelist;
-    rbt->freelist = freenode->next;
-  } else {
-    freenode = rbt_node_delete(rbt, rbt->head->prev);
-  }
+  if(rbt->freelist == 0)
+    rbt_node_delete(rbt, rbt->head->prev);
+
+  freenode = rbt->freelist;
+  rbt->freelist = freenode->next;
 
   freenode->color = color;
   freenode->key = key;
@@ -247,8 +314,17 @@ rbtinsert(struct redblacktree *rbt, int key, int val)
 }
 
 // Delete node from red black tree.
-struct rbnode*
-rbtdelete(struct redblacktree *rbt, int key)
+int
+rbtdelete(struct redblacktree *rbt, int key, int *val)
 {
-  return 0;
+  struct rbnode *n;
+
+  n = binary_search(rbt, key, 0, 0);
+  if(n){
+    *val = n->val;
+    rbt_node_delete(rbt, n);
+    return 0;
+  }
+
+  return -1;
 }
