@@ -154,10 +154,59 @@ rbt_insert_fix(struct redblacktree *rbt, struct rbnode *n)
   }
 }
 
+// Increase black node number of paths that pass n, and delete n
+// color of n should be black and only have leaf node as child
 static void
 rbt_delete_fix(struct redblacktree *rbt, struct rbnode *n)
 {
-  return;
+  struct rbnode *p;
+  struct rbnode *s;
+  struct rbnode *cn;
+  struct rbnode *dn;
+  enum RBCHILD dir;
+  struct rbnode *d;
+
+  d = n;
+
+  while(n->parent){
+    dir = child_dir(n);
+    p = n->parent;
+    s = sibling(n);
+    cn = s->child[dir];
+    dn = s->child[1 - dir];
+
+    if(s->color == RB_RED){ // case 3
+      // colors of p, cn and dn are black
+      // cn, dn is not leaf because black height should be same
+      rotate(p, dir);
+      p->color = RB_RED;
+      s->color = RB_BLACK;
+    } else if(dn != 0 && dn->color == RB_RED){ // case 6
+      // color of s is black and color of cn doesn't matter
+      rotate(p, dir);
+      s->color = p->color;
+      p->color = RB_BLACK;
+      dn->color = RB_BLACK;
+      break;
+    } else if(cn != 0 && cn->color == RB_RED){ // case 5
+      // s black, dn black
+      rotate(s, 1 - dir);
+      s->color = RB_RED;
+      cn->color = RB_BLACK;
+    } else if(p->color == RB_RED){ // case 4
+      s->color = RB_RED;
+      p->color = RB_BLACK;
+      break;
+    } else { // case 2
+      // colors of p, s, cn and dn are black
+      s->color = RB_RED;
+      n = p; // iterate 1 black level higher
+    }
+  }
+
+  d->parent->child[child_dir(d)] = 0;
+  d->next = rbt->freelist;
+  rbt->freelist = d;
 }
 
 // Delete node with the given address n from red black tree.
@@ -196,7 +245,6 @@ rbt_node_delete(struct redblacktree *rbt, struct rbnode *n)
       list_delete(n);
     } else {
       // n->color == RB_BLACK
-      // TODO: delete node and fix red black tree
       rbt_delete_fix(rbt, n);
     }
   } else { // n has 1 child. color of n is RB_BLACK, color of child is RB_RED
