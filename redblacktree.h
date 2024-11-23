@@ -20,10 +20,18 @@ struct rbnode {
 
 // There is no sleeplock for struct redblacktree. Use the inode's one instead.
 struct redblacktree {
-  struct rbnode nodes[RBTREE_ENT];
+  // Root of tree
   struct rbnode *root;
+
+  // List of nodes, in order of most recently used.
+  // head is most recently used, head->next is second most recently used.
+  // and head->prev is least recently used node
   struct rbnode *head;
+
+  // List of free nodes. only use ->next
   struct rbnode *freelist;
+
+  struct rbnode nodes[RBTREE_ENT];
 };
 
 void rbtinit(struct redblacktree *);

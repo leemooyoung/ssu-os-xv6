@@ -176,7 +176,7 @@ iinit(int dev)
 
   // Check if size of struct redblacktree over PGSIZE
   if(sizeof(struct redblacktree) > PGSIZE)
-    panic("rbtinit");
+    panic("rbtsize");
 
   initlock(&icache.lock, "icache");
   for(i = 0; i < NINODE; i++) {
@@ -397,9 +397,14 @@ bmap(struct inode *ip, uint bn)
   uint lv, depth, blockpertable;
   uint addr, *table;
   struct buf *bp;
+  struct rbnode *n;
+  uint bn_origin;
 
-  // TODO: search in redblacktree first
+  // search in redblacktree first
+  n = rbtsearch(ip->baddrcache, bn, 0);
+  if(n) return n->val;
 
+  bn_origin = bn;
   // Calc indirect ref level
   table = ip->addrs;
   blockpertable = 1;
@@ -433,7 +438,8 @@ bmap(struct inode *ip, uint bn)
     brelse(bp);
   }
 
-  // TODO: insert node to redblacktree
+  // insert to redblacktree
+  rbtinsert(ip->baddrcache, bn_origin, addr);
 
   return addr;
 }

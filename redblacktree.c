@@ -47,7 +47,7 @@ sibling(struct rbnode *n)
 // rotate(n, RB_LEFT): left rotate
 // rotate(n, RB_RIGHT): right rotate
 static void
-rotate(struct rbnode *n, enum RBCHILD dir)
+rotate(struct redblacktree *rbt, struct rbnode *n, enum RBCHILD dir)
 {
   struct rbnode *parent;
   struct rbnode *child;
@@ -60,6 +60,7 @@ rotate(struct rbnode *n, enum RBCHILD dir)
 
   child->parent = parent;
   if(parent) parent->child[child_dir(n)] = child;
+  else rbt->root = child;
 
   child->child[1 - dir] = n;
   n->parent = child;
@@ -123,7 +124,7 @@ rbt_insert_fix(struct redblacktree *rbt, struct rbnode *n)
   while(1){
     parent = n->parent;
     grand = parent ? parent->parent : 0;
-    uncle = sibling(parent);
+    uncle = parent ? sibling(parent) : 0;
 
     if(parent == 0){
       n->color = RB_BLACK;
@@ -141,14 +142,14 @@ rbt_insert_fix(struct redblacktree *rbt, struct rbnode *n)
       // If n is inner grandchild of grand, make n the outer grandchild of grand
       // via rotate tree at parent and switch role of parent and n
       if(child_dir(n) != child_dir(parent)){
-        rotate(parent, child_dir(parent));
+        rotate(rbt, parent, child_dir(parent));
         n = parent;
         parent = n->parent;
       }
       // n is outer grandchild of grand
       parent->color = RB_BLACK;
       grand->color = RB_RED;
-      rotate(grand, 1 - child_dir(parent));
+      rotate(rbt, grand, 1 - child_dir(parent));
       break;
     }
   }
@@ -156,6 +157,8 @@ rbt_insert_fix(struct redblacktree *rbt, struct rbnode *n)
 
 // Increase black node number of paths that pass n, and delete n
 // color of n should be black and only have leaf node as child
+// Deleting from mru list and inserting to free list are
+// not the job of this function. These are done in rbt_node_delete function
 static void
 rbt_delete_fix(struct redblacktree *rbt, struct rbnode *n)
 {
@@ -178,19 +181,19 @@ rbt_delete_fix(struct redblacktree *rbt, struct rbnode *n)
     if(s->color == RB_RED){ // case 3
       // colors of p, cn and dn are black
       // cn, dn is not leaf because black height should be same
-      rotate(p, dir);
+      rotate(rbt, p, dir);
       p->color = RB_RED;
       s->color = RB_BLACK;
     } else if(dn != 0 && dn->color == RB_RED){ // case 6
       // color of s is black and color of cn doesn't matter
-      rotate(p, dir);
+      rotate(rbt, p, dir);
       s->color = p->color;
       p->color = RB_BLACK;
       dn->color = RB_BLACK;
       break;
     } else if(cn != 0 && cn->color == RB_RED){ // case 5
       // s black, dn black
-      rotate(s, 1 - dir);
+      rotate(rbt, s, 1 - dir);
       s->color = RB_RED;
       cn->color = RB_BLACK;
     } else if(p->color == RB_RED){ // case 4
@@ -205,8 +208,6 @@ rbt_delete_fix(struct redblacktree *rbt, struct rbnode *n)
   }
 
   d->parent->child[child_dir(d)] = 0;
-  d->next = rbt->freelist;
-  rbt->freelist = d;
 }
 
 // Delete node with the given address n from red black tree.
@@ -246,6 +247,7 @@ rbt_node_delete(struct redblacktree *rbt, struct rbnode *n)
     } else {
       // n->color == RB_BLACK
       rbt_delete_fix(rbt, n);
+      list_delete(n);
     }
   } else { // n has 1 child. color of n is RB_BLACK, color of child is RB_RED
     successor = n->child[RB_LEFT];
