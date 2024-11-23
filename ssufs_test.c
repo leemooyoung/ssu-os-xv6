@@ -13,7 +13,6 @@
 
 char buf[BSIZE];
 
-int rb_print(int a) { return 0; }
 int rb_count(int a) { return 0; }
 
 void _error(const char *msg) {
@@ -45,7 +44,7 @@ void rb_test(char *filename, int blocks, int mode, int steps){
 		printf(1, "rb_print system call start...\n");
 
 		if(rb_print(fd) < 0)
-			_error("rb_count system call error\n");
+			_error("rb_print system call error\n");
 		else
 			_success();
 	}
@@ -81,7 +80,7 @@ void rb_test(char *filename, int blocks, int mode, int steps){
 		printf(1, "rb_print system call start...\n");
 
 		if(rb_print(fd) < 0)
-			_error("rb_count system call error\n");
+			_error("rb_print system call error\n");
 		else
 			_success();
 	}

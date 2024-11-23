@@ -24,6 +24,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int lseek(int, int, int);
+int rb_print(int);
 
 // ulib.c
 int stat(const char*, struct stat*);

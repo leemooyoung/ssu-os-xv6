@@ -378,3 +378,31 @@ rbtdelete(struct redblacktree *rbt, int key, int *val)
 
   return -1;
 }
+
+static char *color[] = { "R", "B" };
+
+// print red black subtree whose root is n in pre-order
+static void
+rbt_subtree_print(struct rbnode *n, int depth, int parent_key)
+{
+  // red black tree with 100 nodes can't heigher than 11
+  // minimal number of nodes for red black tree
+  // with height 12 is 2^(12/2 + 1) - 2 = 126
+  // ref: https://en.wikipedia.org/wiki/Red%E2%80%93black_tree#Proof_of_bounds
+  // if(depth > 11) return;
+
+  cprintf(
+    "key: %d, value: %d, depth: %d, color: %s, parent key: %d\n",
+    n->key, n->val, depth, color[n->color], parent_key
+  );
+  if(n->child[RB_LEFT])
+    rbt_subtree_print(n->child[RB_LEFT], depth + 1, n->key);
+  if(n->child[RB_RIGHT])
+    rbt_subtree_print(n->child[RB_RIGHT], depth + 1, n->key);
+}
+
+void
+rbtprint(struct redblacktree *rbt)
+{
+  if(rbt->root) rbt_subtree_print(rbt->root, 1, -1);
+}
