@@ -109,6 +109,8 @@ binary_search(
 static void
 markmru(struct redblacktree *rbt, struct rbnode *n)
 {
+  if(rbt->head == n) return;
+
   list_delete(n);
   list_insert(n, rbt->head);
   rbt->head = n;
