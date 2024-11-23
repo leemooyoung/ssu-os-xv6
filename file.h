@@ -25,6 +25,11 @@ struct inode {
   uint addrs[BTAB_ENT];
 
   struct redblacktree *baddrcache;
+
+  // TODO: is it better to put these inside red black tree instead?
+  uint bmap_access_count;
+  uint cache_hit_count;
+  uint disk_access_count;
 };
 
 // table mapping major device number to

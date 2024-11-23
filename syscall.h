@@ -22,3 +22,4 @@
 #define SYS_close    21
 #define SYS_lseek    22
 #define SYS_rb_print 23
+#define SYS_rb_count 24

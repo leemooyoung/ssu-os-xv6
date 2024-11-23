@@ -315,6 +315,9 @@ ilock(struct inode *ip)
       ip->baddrcache = (struct redblacktree*)kalloc();
 
     rbtinit(ip->baddrcache);
+    ip->bmap_access_count = 0;
+    ip->cache_hit_count = 0;
+    ip->disk_access_count = 0;
 
     ip->valid = 1;
     if(ip->type == 0)
@@ -400,9 +403,14 @@ bmap(struct inode *ip, uint bn)
   struct rbnode *n;
   uint bn_origin;
 
+  ip->bmap_access_count++;
+
   // search in redblacktree first
   n = rbtsearch(ip->baddrcache, bn, 0);
-  if(n) return n->val;
+  if(n){
+    ip->cache_hit_count++;
+    return n->val;
+  }
 
   bn_origin = bn;
   // Calc indirect ref level
@@ -426,13 +434,17 @@ bmap(struct inode *ip, uint bn)
   }
 
   // Find disk block address, allocating indirect block if necessary.
-  if((addr = table[offset[0]]) == 0)
+  if((addr = table[offset[0]]) == 0){
     table[offset[0]] = addr = balloc(ip->dev);
+    ip->disk_access_count++;
+  }
   for(depth = 1; depth <= lv; depth++){
     bp = bread(ip->dev, addr);
+    ip->disk_access_count++;
     table = (uint*)bp->data;
     if((addr = table[offset[depth]]) == 0){
       table[offset[depth]] = addr = balloc(ip->dev);
+      ip->disk_access_count++;
       log_write(bp); // Indirect block table modified
     }
     brelse(bp);

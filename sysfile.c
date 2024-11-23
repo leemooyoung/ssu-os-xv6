@@ -466,3 +466,19 @@ sys_rb_print(void)
   rbtprint(f->ip->baddrcache);
   return 0;
 }
+
+int
+sys_rb_count(void)
+{
+  struct file *f;
+
+  if(argfd(0, 0, &f) < 0) return -1;
+
+  cprintf(
+    "bmap access count: %d, cache hit count: %d, disk access count: %d\n",
+    f->ip->bmap_access_count,
+    f->ip->cache_hit_count,
+    f->ip->disk_access_count
+  );
+  return 0;
+}

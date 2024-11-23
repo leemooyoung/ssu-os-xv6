@@ -105,6 +105,7 @@ extern int sys_write(void);
 extern int sys_uptime(void);
 extern int sys_lseek(void);
 extern int sys_rb_print(void);
+extern int sys_rb_count(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]     sys_fork,
@@ -130,6 +131,7 @@ static int (*syscalls[])(void) = {
 [SYS_close]    sys_close,
 [SYS_lseek]    sys_lseek,
 [SYS_rb_print] sys_rb_print,
+[SYS_rb_count] sys_rb_count,
 };
 
 void

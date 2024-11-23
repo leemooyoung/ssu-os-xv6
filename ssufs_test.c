@@ -13,8 +13,6 @@
 
 char buf[BSIZE];
 
-int rb_count(int a) { return 0; }
-
 void _error(const char *msg) {
 	printf(1, msg);
 	printf(1, "ssufs_test failed...\n");
