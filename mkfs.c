@@ -238,19 +238,78 @@ void
 balloc(int used)
 {
   uchar buf[BSIZE];
-  int i;
+  int i, bn;
 
   printf("balloc: first %d blocks have been allocated\n", used);
-  assert(used < BSIZE*8);
+  printf("balloc: write bitmap block at sector %d\n", sb.bmapstart);
+
+  for(bn = 0; bn < used / (BSIZE * 8); bn++){
+    memset(buf, 0xFF, BSIZE); // set all bits of buf to 1
+    wsect(sb.bmapstart + bn, buf);
+  }
+
   bzero(buf, BSIZE);
-  for(i = 0; i < used; i++){
+  for(i = 0; i < used - bn * BSIZE * 8; i++){
     buf[i/8] = buf[i/8] | (0x1 << (i%8));
   }
-  printf("balloc: write bitmap block at sector %d\n", sb.bmapstart);
-  wsect(sb.bmapstart, buf);
+  wsect(sb.bmapstart + bn, buf);
+
+  printf("balloc: %d bitmap blocks are written\n", bn + 1);
 }
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
+
+// Copy from fs.c bmap
+int
+ibmap(struct dinode *din, uint bn)
+{
+  uint bn_bound[] = { NDIRECT, N_1_INDIRECT, N_2_INDIRECT, N_3_INDIRECT };
+  uint blocktable_bound[] = {
+    DIR_BTAB_ENT, S_INDIR_BTAB_ENT, D_INDIR_BTAB_ENT, T_INDIR_BTAB_ENT
+  };
+  uint offset[] = { 0, 0, 0, 0 };
+  uint lv, depth, blockpertable;
+  uint addr, table_start_i;
+  uint table[BPINDIRECT];
+
+  // Calc indirect ref level
+  blockpertable = 1;
+  table_start_i = 0;
+  for(lv = 0; lv < 4; lv++){
+    if(bn < bn_bound[lv]) break;
+    bn -= bn_bound[lv];
+    // Skip to start of next indirect ref level table
+    table_start_i += blocktable_bound[lv]; // bn_bound[lv] / blockpertable
+    blockpertable *= BPINDIRECT;
+  }
+
+  if(lv == 4){
+    perror("ibmap: out of range");
+    exit(1);
+  }
+
+  // Calc offset of each indirect ref level
+  for(depth = 0; depth <= lv; depth++){
+    offset[depth] = bn / blockpertable;
+    bn %= blockpertable;
+    blockpertable /= BPINDIRECT;
+  }
+
+  // Find disk block address, allocating indirect block if necessary.
+  if((addr = din->addrs[table_start_i + offset[0]]) == 0){
+    din->addrs[table_start_i + offset[0]] = addr = xint(freeblock++);
+  }
+  for(depth = 1; depth <= lv; depth++){
+    rsect(xint(addr), (char*)table);
+    if(table[offset[depth]] == 0){
+      table[offset[depth]] = xint(freeblock++);
+      wsect(xint(addr), (char*)table);
+    }
+    addr = table[offset[depth]];
+  }
+
+  return xint(addr);
+}
 
 void
 iappend(uint inum, void *xp, int n)
@@ -259,7 +318,6 @@ iappend(uint inum, void *xp, int n)
   uint fbn, off, n1;
   struct dinode din;
   char buf[BSIZE];
-  uint indirect[NINDIRECT];
   uint x;
 
   rinode(inum, &din);
@@ -268,25 +326,7 @@ iappend(uint inum, void *xp, int n)
   while(n > 0){
     fbn = off / BSIZE;
     assert(fbn < MAXFILE);
-    if(fbn < NDIRECT){
-      if(xint(din.addrs[fbn]) == 0){
-        din.addrs[fbn] = xint(freeblock++);
-      }
-      x = xint(din.addrs[fbn]);
-    } else if(fbn < NDIRECT + N_1_INDIRECT){
-      if(xint(din.addrs[NDIRECT]) == 0){
-        din.addrs[NDIRECT] = xint(freeblock++);
-      }
-      rsect(xint(din.addrs[NDIRECT]), (char*)indirect);
-      if(indirect[fbn - NDIRECT] == 0){
-        indirect[fbn - NDIRECT] = xint(freeblock++);
-        wsect(xint(din.addrs[NDIRECT]), (char*)indirect);
-      }
-      x = xint(indirect[fbn-NDIRECT]);
-    } else {
-      perror("iappend");
-      exit(1);
-    }
+    x = ibmap(&din, fbn);
     n1 = min(n, (fbn + 1) * BSIZE - off);
     rsect(x, buf);
     bcopy(p, buf + off - (fbn * BSIZE), n1);
