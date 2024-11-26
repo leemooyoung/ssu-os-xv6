@@ -181,6 +181,7 @@ lazygrowproc(int n, int t)
   uint sz;
   struct proc *curproc = myproc();
   struct rtcdate date;
+  uint ctick;
 
   sz = curproc->sz;
   if(n > 0){
@@ -188,8 +189,11 @@ lazygrowproc(int n, int t)
       return -1;
     curproc->sz = sz;
   } else if(n < 0){
+    acquire(&tickslock);
+    ctick = ticks;
+    release(&tickslock);
     curproc->lazydeallocsz += -n;
-    curproc->lazydealloctick = t;
+    curproc->lazydealloctick = ctick + t;
     cmostime(&date);
     cprintf("Memory deallocation request(%d): %t\n", t, &date);
     return 0;
@@ -201,22 +205,30 @@ lazygrowproc(int n, int t)
 void
 checklazygrowproc(void)
 {
-  struct proc *p;
+  struct proc *curproc;
   struct rtcdate date;
+  uint ctick;
+
+  if((curproc = myproc()) == 0) return;
+
+  acquire(&tickslock);
+  ctick = ticks;
+  release(&tickslock);
 
   acquire(&ptable.lock);
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->lazydealloctick > 0){
-      p->lazydealloctick--;
-      if(p->lazydealloctick == 0){
-        p->sz = deallocuvm(p->pgdir, p->sz, p->sz - p->lazydeallocsz);
-        p->lazydeallocsz = 0;
-        cmostime(&date);
-        cprintf("Memory deallocation execute: %t\n", &date);
-        memstat();
-        p->killed = 1;
-      }
-    }
+  if(curproc->lazydealloctick > 0 && curproc->lazydealloctick <= ctick){
+    curproc->sz = deallocuvm(
+      curproc->pgdir,
+      curproc->sz,
+      curproc->sz - curproc->lazydeallocsz
+    );
+    curproc->lazydeallocsz = 0;
+    curproc->lazydealloctick = 0;
+    switchuvm(curproc);
+    cmostime(&date);
+    cprintf("Memory deallocation execute: %t\n", &date);
+    memstat();
+    curproc->killed = 1;
   }
   release(&ptable.lock);
 }
@@ -555,7 +567,7 @@ memstat(void)
   pte_t *pte;
 
   uint vpg = curproc->sz / PGSIZE;
-  uint lazypg = 0;;
+  uint lazypg = 0;
 
   pgdir = curproc->pgdir;
   for(pde = pgdir; pde < &pgdir[PDX(KERNBASE)]; pde++){

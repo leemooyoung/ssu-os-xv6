@@ -72,8 +72,8 @@ trap(struct trapframe *tf)
       ticks++;
       wakeup(&ticks);
       release(&tickslock);
-      checklazygrowproc();
     }
+    checklazygrowproc();
     lapiceoi();
     break;
   case T_IRQ0 + IRQ_IDE:

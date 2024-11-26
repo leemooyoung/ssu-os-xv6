@@ -311,6 +311,7 @@ completelazyalloc(struct proc *curproc, void *va)
 
   memset(mem, 0, PGSIZE);
   *pte = (V2P(mem) | PTE_FLAGS(*pte) | PTE_P) & ~PTE_L;
+  switchuvm(curproc);
   return 0;
 }
 
