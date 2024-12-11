@@ -128,12 +128,15 @@ rbt_insert_fix(struct redblacktree *rbt, struct rbnode *n)
     grand = parent ? parent->parent : 0;
     uncle = parent ? sibling(parent) : 0;
 
-    if(parent == 0){
+    if(parent == 0){ // case 3
       n->color = RB_BLACK;
       break;
-    } else if(parent->color == RB_BLACK){
+    } else if(parent->color == RB_BLACK){ // case 1
       break;
-    } else if(uncle && uncle->color == RB_RED){
+    } else if(grand == 0) { // case 4
+      parent->color = RB_BLACK;
+      break;
+    } else if(uncle && uncle->color == RB_RED){ // case 2
       // parent->color == RB_RED implies grand != 0 && grand->color == RB_BLACK
       parent->color = RB_BLACK;
       uncle->color = RB_BLACK;
@@ -143,11 +146,13 @@ rbt_insert_fix(struct redblacktree *rbt, struct rbnode *n)
       // uncle is leaf node or uncle->color == RB_BLACK
       // If n is inner grandchild of grand, make n the outer grandchild of grand
       // via rotate tree at parent and switch role of parent and n
-      if(child_dir(n) != child_dir(parent)){
+      if(child_dir(n) != child_dir(parent)){ // case 5
         rotate(rbt, parent, child_dir(parent));
         n = parent;
         parent = n->parent;
       }
+
+      // case 6
       // n is outer grandchild of grand
       parent->color = RB_BLACK;
       grand->color = RB_RED;
@@ -177,6 +182,8 @@ rbt_delete_fix(struct redblacktree *rbt, struct rbnode *n)
     dir = child_dir(n);
     p = n->parent;
     s = sibling(n);
+    if(s == 0) panic("rbt sibling 0");
+
     cn = s->child[dir];
     dn = s->child[1 - dir];
 
@@ -186,14 +193,14 @@ rbt_delete_fix(struct redblacktree *rbt, struct rbnode *n)
       rotate(rbt, p, dir);
       p->color = RB_RED;
       s->color = RB_BLACK;
-    } else if(dn != 0 && dn->color == RB_RED){ // case 6
+    } else if(dn && dn->color == RB_RED){ // case 6
       // color of s is black and color of cn doesn't matter
       rotate(rbt, p, dir);
       s->color = p->color;
       p->color = RB_BLACK;
       dn->color = RB_BLACK;
       break;
-    } else if(cn != 0 && cn->color == RB_RED){ // case 5
+    } else if(cn && cn->color == RB_RED){ // case 5
       // s black, dn black
       rotate(rbt, s, 1 - dir);
       s->color = RB_RED;
@@ -270,6 +277,8 @@ rbt_node_delete(struct redblacktree *rbt, struct rbnode *n)
 
   n->next = rbt->freelist;
   rbt->freelist = n;
+
+  // check_rbt(rbt);
 }
 
 // Take node in freelist or recycle least recently used node.
@@ -355,13 +364,25 @@ rbtinsert(struct redblacktree *rbt, int key, int val)
     return n;
   }
 
-  freenode = rbt_node_alloc(rbt, RB_RED, key, val);
+  // If a node is deleted because there is no freelist left,
+  // it is necessary to recalculate p & childpos.
+  // TODO: Optimize needed
+  // Doing binary search twice might be a bit wasteful. There might be a way to
+  // recalculate p & childpos with a little bit of calculation.
+  if(rbt->freelist == 0){
+    freenode = rbt_node_alloc(rbt, RB_RED, key, val);
+    binary_search(rbt, key, &p, &childpos);
+  } else {
+    freenode = rbt_node_alloc(rbt, RB_RED, key, val);
+  }
+
   freenode->parent = p;
   p->child[childpos] = freenode;
   markmru(rbt, freenode);
 
   rbt_insert_fix(rbt, freenode);
 
+  // check_rbt(rbt);
   return freenode;
 }
 
@@ -383,28 +404,110 @@ rbtdelete(struct redblacktree *rbt, int key, int *val)
 
 static char *color[] = { "R", "B" };
 
-// print red black subtree whose root is n in pre-order
-static void
-rbt_subtree_print(struct rbnode *n, int depth, int parent_key)
-{
-  // red black tree with 100 nodes can't heigher than 11
-  // minimal number of nodes for red black tree
-  // with height 12 is 2^(12/2 + 1) - 2 = 126
-  // ref: https://en.wikipedia.org/wiki/Red%E2%80%93black_tree#Proof_of_bounds
-  // if(depth > 11) return;
+// // print red black subtree whose root is n in pre-order
+// static void
+// rbt_subtree_print(struct rbnode *n, int depth, int parent_key)
+// {
+//   // red black tree with 100 nodes can't heigher than 11
+//   // minimal number of nodes for red black tree
+//   // with height 12 is 2^(12/2 + 1) - 2 = 126
+//   // ref: https://en.wikipedia.org/wiki/Red%E2%80%93black_tree#Proof_of_bounds
+//   // if(depth > 11) return;
 
+//   cprintf(
+//     "key: %d, value: %d, depth: %d, color: %s, parent key: %d\n",
+//     n->key, n->val, depth, color[n->color], parent_key
+//   );
+//   if(n->child[RB_LEFT])
+//     rbt_subtree_print(n->child[RB_LEFT], depth + 1, n->key);
+//   if(n->child[RB_RIGHT])
+//     rbt_subtree_print(n->child[RB_RIGHT], depth + 1, n->key);
+// }
+
+static void
+print_indent(int i)
+{
+  while(i-- > 0){
+    cprintf("| ");
+  }
+}
+
+int node_seq;
+
+static void
+rbt_subtree_print_graphic(struct rbnode *n, int depth, int parent_key)
+{
+  print_indent(depth);
   cprintf(
-    "key: %d, value: %d, depth: %d, color: %s, parent key: %d\n",
-    n->key, n->val, depth, color[n->color], parent_key
+    "key: %d, value: %d, depth: %d, color: %s, parent key: %d, seq: %d\n",
+    n->key, n->val, depth, color[n->color], parent_key, node_seq++
   );
   if(n->child[RB_LEFT])
-    rbt_subtree_print(n->child[RB_LEFT], depth + 1, n->key);
+    rbt_subtree_print_graphic(n->child[RB_LEFT], depth + 1, n->key);
   if(n->child[RB_RIGHT])
-    rbt_subtree_print(n->child[RB_RIGHT], depth + 1, n->key);
+    rbt_subtree_print_graphic(n->child[RB_RIGHT], depth + 1, n->key);
 }
 
 void
 rbtprint(struct redblacktree *rbt)
 {
-  if(rbt->root) rbt_subtree_print(rbt->root, 1, -1);
+  node_seq = 0;
+  // if(rbt->root) rbt_subtree_print(rbt->root, 1, -1);
+  if(rbt->root) rbt_subtree_print_graphic(rbt->root, 0, -1);
+}
+
+int
+check_rbt_recur(struct rbnode *n)
+{
+  int tmp;
+
+  if(n->child[RB_LEFT] == 0 && n->child[RB_RIGHT] == 0){
+    if(n->color == RB_RED) return 0;
+
+    return 1;
+  } else if(n->child[RB_LEFT] != 0 && n->child[RB_RIGHT] == 0){
+    if(n->color == RB_RED) return -1;
+    if(n->child[RB_LEFT]->color == RB_BLACK) return -1;
+    if(check_rbt_recur(n->child[RB_LEFT]) != 0) return -1;
+
+    return 1;
+  } else if(n->child[RB_LEFT] == 0 && n->child[RB_RIGHT] != 0){
+    if(n->color == RB_RED) return -1;
+    if(n->child[RB_RIGHT]->color == RB_BLACK) return -1;
+    if(check_rbt_recur(n->child[RB_RIGHT]) != 0) return -1;
+
+    return 1;
+  } else /* if(n->child[RB_LEFT] != 0 && n->child[RB_RIGHT] != 0) */ {
+    if(
+      n->color == RB_RED
+      && (n->child[RB_LEFT]->color == RB_RED
+        || n->child[RB_RIGHT]->color == RB_RED)
+    ) return -1;
+
+    tmp = check_rbt_recur(n->child[RB_LEFT]);
+    if(tmp != check_rbt_recur(n->child[RB_RIGHT])) return -1;
+
+    if(n->color == RB_BLACK) tmp++;
+
+    return tmp;
+  }
+}
+
+int
+check_rbt(struct redblacktree *rbt)
+{
+  int depth;
+
+  if(rbt->root == 0) return 0;
+
+  depth = check_rbt_recur(rbt->root);
+  if(depth < 0){
+    cprintf("------\n\n");
+    cprintf("invald rbt\n");
+    rbtprint(rbt);
+  } else {
+    // cprintf("valid rbt, black height: %d\n", depth);
+  }
+  
+  return depth;
 }

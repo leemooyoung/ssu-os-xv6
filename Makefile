@@ -184,6 +184,7 @@ UPROGS=\
 	_wc\
 	_zombie\
 	_ssufs_test\
+	_3-3_test\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)
@@ -257,6 +258,7 @@ EXTRA=\
 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
 	.gdbinit.tmpl gdbutil\
 	ssufs_test.c\
+	3-3_test.c\
 
 dist:
 	rm -rf dist

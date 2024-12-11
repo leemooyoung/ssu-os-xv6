@@ -43,3 +43,5 @@ struct rbnode *rbtinsert(struct redblacktree *, int, int);
 int rbtdelete(struct redblacktree *, int, int *);
 
 void rbtprint(struct redblacktree *);
+
+int check_rbt(struct redblacktree *);
